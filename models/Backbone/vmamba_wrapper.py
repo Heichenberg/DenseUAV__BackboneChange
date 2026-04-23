@@ -141,7 +141,7 @@ def _import_vmamba_builders():
     from third_party.vmamba import vmamba
     from third_party.vmamba.vmamba import (
         vmamba_base_s2l15,
-        vmamba_small_s2l15,
+        vmamba_small_s1l20,
         vmamba_tiny_s1l8,
     )
 

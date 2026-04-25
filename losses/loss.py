@@ -2,7 +2,6 @@ import torch
 from torch import nn
 from .TripletLoss import SameDomainTripletLoss, WeightedSoftTripletLoss, HardMiningTripletLoss, TripletLoss
 from .FocalLoss import FocalLoss
-from pytorch_metric_learning import losses, miners  # pip install pytorch-metric-learning
 import torch.nn.functional as F
 from torch.autograd import Variable
 
@@ -28,6 +27,7 @@ class Loss(nn.Module):
         elif opt.feature_loss == "WeightedSoftTripletLoss":
             self.feature_loss = WeightedSoftTripletLoss()
         elif opt.feature_loss == "ContrastiveLoss":
+            from pytorch_metric_learning import losses  # pip install pytorch-metric-learning
             self.feature_loss = losses.ContrastiveLoss(pos_margin=0, neg_margin=1)
         else:
             self.feature_loss = None
@@ -111,5 +111,4 @@ class Loss(nn.Module):
             labels_concat = torch.cat((labels, labels), dim=0)
             loss = loss_func(out_concat, labels_concat)
         return loss
-
 

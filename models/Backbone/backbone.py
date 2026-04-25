@@ -1,7 +1,6 @@
 import torch.nn as nn
 import timm
 from .RKNet import RKNet
-from .cvt import get_cvt_models
 from .vmamba_wrapper import VMambaBaseBackbone, VMambaSmallBackbone, VMambaTinyBackbone
 import torch
 
@@ -74,6 +73,7 @@ class Backbone(nn.Module):
             backbone_model = timm.create_model("vgg16", pretrained=True)
             output_channel = 512
         elif backbone=="cvt13":
+            from .cvt import get_cvt_models
             backbone_model, channels = get_cvt_models(model_size="cvt13")
             output_channel = channels[-1]
             checkpoint_weight = "/home/dmmm/VscodeProject/FPI/pretrain_model/CvT-13-384x384-IN-22k.pth"

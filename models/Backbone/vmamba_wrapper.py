@@ -138,6 +138,7 @@ def _ensure_csm_triton_stub():
 def _import_vmamba_builders():
     _ensure_fvcore_stub()
     _ensure_csm_triton_stub()
+    from third_party.vmamba import csms6s
     from third_party.vmamba import vmamba
     from third_party.vmamba.vmamba import (
         vmamba_base_s2l15,
@@ -147,6 +148,7 @@ def _import_vmamba_builders():
 
     original_cross_scan_fn = vmamba.cross_scan_fn
     original_cross_merge_fn = vmamba.cross_merge_fn
+    original_selective_scan_fn = csms6s.selective_scan_fn
 
     def cpu_safe_cross_scan_fn(x, in_channel_first=True, out_channel_first=True, one_by_one=False, scans=0, force_torch=False):
         if x.is_cuda:
@@ -158,8 +160,15 @@ def _import_vmamba_builders():
             return original_cross_merge_fn(y, in_channel_first, out_channel_first, one_by_one, scans, force_torch)
         return _cross_merge_fwd(y, in_channel_first, out_channel_first, scans)
 
+    def cpu_safe_selective_scan_fn(u, delta, A, B, C, D=None, delta_bias=None, delta_softplus=True, oflex=True, backend=None):
+        if not u.is_cuda:
+            backend = "torch"
+        return original_selective_scan_fn(u, delta, A, B, C, D, delta_bias, delta_softplus, oflex, backend)
+
     vmamba.cross_scan_fn = cpu_safe_cross_scan_fn
     vmamba.cross_merge_fn = cpu_safe_cross_merge_fn
+    vmamba.selective_scan_fn = cpu_safe_selective_scan_fn
+    csms6s.selective_scan_fn = cpu_safe_selective_scan_fn
     return {
         "tiny": vmamba_tiny_s1l8,
         "small": vmamba_small_s2l15,

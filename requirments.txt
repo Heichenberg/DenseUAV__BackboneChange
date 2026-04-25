@@ -1,10 +1,12 @@
+numpy<2
 scipy
 tqdm
 pyyaml
 matplotlib
 opencv-python
-timm
+timm==0.4.12
 pillow
 einops
 thop
-pytorch_metric_learning
+pytorch-metric-learning
+fvcore

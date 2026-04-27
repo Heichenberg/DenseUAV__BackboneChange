@@ -8,18 +8,26 @@ import glob
 
 
 class Dataloader_University(Dataset):
-    def __init__(self, root, transforms, names=['satellite', 'drone']):
+    def __init__(self, root, transforms, names=['satellite', 'drone'], max_ids=0, id_subset_file=""):
         super(Dataloader_University).__init__()
         self.transforms_drone_street = transforms['train']
         self.transforms_satellite = transforms['satellite']
         self.root = root
         self.names = names
+        cls_names = os.listdir(os.path.join(root, names[0]))
+        cls_names.sort()
+        if id_subset_file:
+            with open(id_subset_file, "r", encoding="utf-8") as handle:
+                selected = [line.strip() for line in handle if line.strip()]
+            cls_names = [name for name in cls_names if name in set(selected)]
+        elif max_ids > 0:
+            cls_names = cls_names[:max_ids]
         # 获取所有图片的相对路径分别放到对应的类别中
         # {satelite:{0839:[0839.jpg],0840:[0840.jpg]}}
         dict_path = {}
         for name in names:
             dict_ = {}
-            for cls_name in os.listdir(os.path.join(root, name)):
+            for cls_name in cls_names:
                 img_list = os.listdir(os.path.join(root, name, cls_name))
                 img_path_list = [os.path.join(
                     root, name, cls_name, img) for img in img_list]
@@ -28,8 +36,6 @@ class Dataloader_University(Dataset):
             # dict_path[name+"/"+cls_name] = img_path_list
 
         # 获取设置名字与索引之间的镜像
-        cls_names = os.listdir(os.path.join(root, names[0]))
-        cls_names.sort()
         map_dict = {i: cls_names[i] for i in range(len(cls_names))}
 
         self.cls_names = cls_names

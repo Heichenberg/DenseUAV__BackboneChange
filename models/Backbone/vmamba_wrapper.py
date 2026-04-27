@@ -138,11 +138,11 @@ def _ensure_csm_triton_stub():
 def _import_vmamba_builders():
     _ensure_fvcore_stub()
     _ensure_csm_triton_stub()
-    from third_party.vmamba import csms6s
-    from third_party.vmamba import vmamba
-    from third_party.vmamba.vmamba import (
+    from third_party.vmamba.classification.models import csms6s
+    from third_party.vmamba.classification.models import vmamba
+    from third_party.vmamba.classification.models.vmamba import (
         vmamba_base_s2l15,
-        vmamba_small_s1l20,
+        vmamba_small_s2l15,
         vmamba_tiny_s1l8,
     )
 
@@ -179,16 +179,21 @@ def _import_vmamba_builders():
 class VMambaBackbone(nn.Module):
     _BUILDERS = None
 
-    def __init__(self, variant="tiny", pretrained=""):
+    def __init__(self, variant="tiny", pretrained="", output_mode="map"):
         super().__init__()
         if self._BUILDERS is None:
             type(self)._BUILDERS = _import_vmamba_builders()
         if variant not in self._BUILDERS:
             raise ValueError("Unsupported VMamba variant: {}".format(variant))
+        if output_mode not in {"map", "vector"}:
+            raise ValueError("Unsupported VMamba output mode: {}".format(output_mode))
 
         self.variant = variant
+        self.output_mode = output_mode
         self.backbone = self._BUILDERS[variant](channel_first=True)
         self.output_channel = self.backbone.num_features
+        self.global_pool = nn.AdaptiveAvgPool2d(1)
+        self.output_norm = nn.LayerNorm(self.output_channel)
 
         if pretrained:
             self.load_pretrained(pretrained)
@@ -220,6 +225,10 @@ class VMambaBackbone(nn.Module):
         if not self.backbone.channel_first:
             x = x.permute(0, 3, 1, 2).contiguous()
 
+        if self.output_mode == "vector":
+            x = self.global_pool(x).reshape(x.shape[0], -1)
+            x = self.output_norm(x)
+
         return x
 
     def forward(self, x):
@@ -227,15 +236,15 @@ class VMambaBackbone(nn.Module):
 
 
 class VMambaTinyBackbone(VMambaBackbone):
-    def __init__(self, pretrained=""):
-        super().__init__(variant="tiny", pretrained=pretrained)
+    def __init__(self, pretrained="", output_mode="map"):
+        super().__init__(variant="tiny", pretrained=pretrained, output_mode=output_mode)
 
 
 class VMambaSmallBackbone(VMambaBackbone):
-    def __init__(self, pretrained=""):
-        super().__init__(variant="small", pretrained=pretrained)
+    def __init__(self, pretrained="", output_mode="map"):
+        super().__init__(variant="small", pretrained=pretrained, output_mode=output_mode)
 
 
 class VMambaBaseBackbone(VMambaBackbone):
-    def __init__(self, pretrained=""):
-        super().__init__(variant="base", pretrained=pretrained)
+    def __init__(self, pretrained="", output_mode="map"):
+        super().__init__(variant="base", pretrained=pretrained, output_mode=output_mode)

@@ -4,6 +4,7 @@ from .FSRA import FSRA, FSRA_CNN
 from .LPN import LPN, LPN_CNN
 from .GeM import GeM
 from .NetVLAD import NetVLAD
+from .MixerHead import MixerHeadV1
 
 def make_head(opt):
     return Head(opt)
@@ -35,6 +36,8 @@ class Head(nn.Module):
             head_model = LPN_CNN(opt)
         elif head == "GeM":
             head_model = GeM(opt)
+        elif head == "MixerHeadV1":
+            head_model = MixerHeadV1(opt)
         else:
             raise NameError("{} not in the head list!!!".format(head))
         return head_model

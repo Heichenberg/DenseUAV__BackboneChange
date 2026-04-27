@@ -11,6 +11,14 @@ import json
 from tqdm import tqdm
 import math
 
+# 它做的是带地理位置信息的距离评估，不是普通 Recall。
+# SDM
+# 代码里是 evaluate_SDM()
+# 表示 top-K 结果在地理距离上的加权质量。
+
+# MA
+# 代码里是 evaluate_MA()
+# 看 top1 检索结果落在多少米以内。
 
 #####################################################################
 # Show result

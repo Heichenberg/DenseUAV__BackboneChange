@@ -15,14 +15,16 @@ def make_dataset(opt):
     transform_train_list += [
         transforms.Resize((opt.h, opt.w), interpolation=3),
         transforms.Pad(opt.pad, padding_mode='edge'),
-        transforms.RandomHorizontalFlip(),
     ]
+    if not getattr(opt, "disable_hflip", False):
+        transform_train_list.append(transforms.RandomHorizontalFlip())
 
     transform_satellite_list += [
         transforms.Resize((opt.h, opt.w), interpolation=3),
         transforms.Pad(opt.pad, padding_mode='edge'),
-        transforms.RandomHorizontalFlip(),
     ]
+    if not getattr(opt, "disable_hflip", False):
+        transform_satellite_list.append(transforms.RandomHorizontalFlip())
 
     transform_val_list = [
         transforms.Resize(size=(opt.h, opt.w),
@@ -74,7 +76,11 @@ def make_dataset(opt):
 
     # custom Dataset
     image_datasets = Dataloader_University(
-        opt.data_dir, transforms=data_transforms)
+        opt.data_dir,
+        transforms=data_transforms,
+        max_ids=getattr(opt, "max_ids", 0),
+        id_subset_file=getattr(opt, "id_subset_file", ""),
+    )
     samper = Sampler_University(
         image_datasets, batchsize=opt.batchsize, sample_num=opt.sample_num)
     dataloaders = torch.utils.data.DataLoader(image_datasets, batch_size=opt.batchsize,

@@ -2,6 +2,7 @@
 
 from __future__ import print_function, division
 import argparse
+import os
 import torch
 import torch.nn as nn
 
@@ -13,7 +14,7 @@ from optimizers.make_optimizer import make_optimizer
 # from models.model import make_model
 from models.taskflow import make_model
 from datasets.make_dataloader import make_dataset
-from tool.utils import save_network, copyfiles2checkpoints, get_preds, get_logger, calc_flops_params, set_seed
+from tool.utils import save_network, copyfiles2checkpoints, get_preds, get_logger, calc_flops_params, set_seed, save_training_checkpoint, load_training_checkpoint, save_run_artifacts
 import warnings
 from losses.loss import Loss
 
@@ -38,6 +39,8 @@ def get_parse():
     parser.add_argument('--ra', default="", type=str, help='random affine')
     parser.add_argument('--re', default="", type=str, help='random erasing')
     parser.add_argument('--cj', default="", type=str, help='color jitter')
+    parser.add_argument('--disable_hflip', action='store_true',
+                        help='disable default random horizontal flip in training transforms')
     parser.add_argument('--erasing_p', default=0.3, type=float,
                         help='random erasing probability, in [0,1]')
     parser.add_argument('--warm_epoch', default=0, type=int,
@@ -49,6 +52,8 @@ def get_parse():
                         type=float, help='drop rate')
     parser.add_argument('--autocast', action='store_true',
                         default=True, help='use mix precision')
+    parser.add_argument('--disable_autocast', action='store_true',
+                        help='disable mixed precision for debug runs')
     parser.add_argument('--block', default=2, type=int, help='')
     parser.add_argument('--cls_loss', default="CELoss", type=str, help='loss type of representation learning')
     parser.add_argument('--feature_loss', default="no", type=str, help='loss type of metric learning')
@@ -62,13 +67,37 @@ def get_parse():
     parser.add_argument('--backbone_weight', default="", type=str, help='pretrained backbone checkpoint path')
     parser.add_argument('--head', default="FSRA_CNN", type=str, help='head type for applying')
     parser.add_argument('--head_pool', default="max", type=str, help='head pooling type for applying')
+    parser.add_argument('--max_train_batches', default=0, type=int,
+                        help='max batches per epoch, 0 means no limit')
+    parser.add_argument('--max_total_batches', default=0, type=int,
+                        help='max batches for the whole run, 0 means no limit')
+    parser.add_argument('--max_ids', default=0, type=int,
+                        help='use only the first N sorted train IDs, 0 means all')
+    parser.add_argument('--id_subset_file', default="", type=str,
+                        help='text file containing one train ID per line')
+    parser.add_argument('--seed', default=666, type=int, help='random seed')
+    parser.add_argument('--resume', default="", type=str, help='resume training checkpoint path')
+    parser.add_argument('--eval_interval', default=1, type=int, help='epoch interval for latest/best checkpoint update')
+    parser.add_argument('--save_latest', action='store_true', default=True, help='save latest checkpoint during training')
+    parser.add_argument('--save_best', action='store_true', default=True, help='save best checkpoint during training')
+    parser.add_argument('--best_metric', default='satellite_acc', type=str, choices=['satellite_acc', 'drone_acc', 'loss'], help='metric used for best checkpoint')
     
 
     opt = parser.parse_args()
+    if opt.disable_autocast:
+        opt.autocast = False
     print(opt)
     return opt
 
-def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes):
+def metric_value(summary, metric_name):
+    if metric_name == "loss":
+        return -summary["epoch_loss"]
+    if metric_name == "drone_acc":
+        return summary["epoch_acc2"]
+    return summary["epoch_acc"]
+
+
+def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, start_epoch=0, best_metric=None):
     logger = get_logger(
         "checkpoints/{}/train.log".format(opt.name))
 
@@ -80,9 +109,10 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes):
     use_gpu = opt.use_gpu
     num_epochs = opt.num_epochs
     since = time.time()
-    scaler = GradScaler()
+    scaler = GradScaler(enabled=opt.autocast and use_gpu)
     nnloss = Loss(opt)
-    for epoch in range(num_epochs):
+    total_batches_seen = 0
+    for epoch in range(start_epoch, num_epochs):
         logger.info('Epoch {}/{}'.format(epoch, num_epochs - 1))
         logger.info('-' * 50)
 
@@ -93,7 +123,17 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes):
         running_loss = 0.0
         running_corrects = 0.0
         running_corrects2 = 0.0
+        epoch_batches = 0
+        epoch_samples = 0
+        stop_training = False
         for data, data3 in dataloaders:
+            if opt.max_train_batches > 0 and epoch_batches >= opt.max_train_batches:
+                logger.info('Reached max_train_batches=%d for epoch %d', opt.max_train_batches, epoch)
+                break
+            if opt.max_total_batches > 0 and total_batches_seen >= opt.max_total_batches:
+                logger.info('Reached max_total_batches=%d, stopping training early', opt.max_total_batches)
+                stop_training = True
+                break
             # 获取输入无人机和卫星数据
             inputs, labels = data
             inputs3, labels3 = data3
@@ -113,12 +153,14 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes):
 
             # start_time = time.time()
             # 模型前向传播
-            with autocast():
+            with autocast(enabled=opt.autocast and use_gpu):
                 outputs, outputs2 = model(inputs, inputs3)
             # print("model_time:{}".format(time.time()-start_time))
             # 计算损失
             loss, cls_loss, f_triplet_loss, kl_loss = nnloss(
                 outputs, outputs2, labels, labels3)
+            if not torch.isfinite(loss):
+                raise ValueError("Non-finite loss detected: {}".format(loss.item()))
             # start_time = time.time()
             # 反向传播
             if opt.autocast:
@@ -135,6 +177,9 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes):
             running_cls_loss += cls_loss.item()*now_batch_size
             running_triplet += f_triplet_loss.item() * now_batch_size
             running_kl_loss += kl_loss.item() * now_batch_size
+            epoch_batches += 1
+            epoch_samples += now_batch_size
+            total_batches_seen += 1
 
             # 统计精度
             preds, preds2 = get_preds(outputs[0], outputs2[0])
@@ -148,21 +193,41 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes):
                 running_corrects2 += float(torch.sum(preds2 == labels3.data))
 
         # 统计损失和精度
-        epoch_cls_loss = running_cls_loss/dataset_sizes['satellite']
-        epoch_kl_loss = running_kl_loss / dataset_sizes['satellite']
-        epoch_triplet_loss = running_triplet/dataset_sizes['satellite']
-        epoch_loss = running_loss / dataset_sizes['satellite']
-        epoch_acc = running_corrects / dataset_sizes['satellite']
-        epoch_acc2 = running_corrects2 / dataset_sizes['satellite']
+        denom = max(epoch_samples, 1)
+        epoch_cls_loss = running_cls_loss / denom
+        epoch_kl_loss = running_kl_loss / denom
+        epoch_triplet_loss = running_triplet / denom
+        epoch_loss = running_loss / denom
+        epoch_acc = running_corrects / denom
+        epoch_acc2 = running_corrects2 / denom
 
         lr_backbone = optimizer.state_dict()['param_groups'][0]['lr']
         lr_other = optimizer.state_dict()['param_groups'][1]['lr']
-        logger.info('Loss: {:.4f} Cls_Loss:{:.4f} KL_Loss:{:.4f} Triplet_Loss {:.4f} Satellite_Acc: {:.4f}  Drone_Acc: {:.4f} lr_backbone:{:.6f} lr_other {:.6f}'
+        logger.info('Loss: {:.4f} Cls_Loss:{:.4f} KL_Loss:{:.4f} Triplet_Loss {:.4f} Satellite_Acc: {:.4f}  Drone_Acc: {:.4f} lr_backbone:{:.6f} lr_other {:.6f} actual_num_batches:{} actual_num_samples:{}'
                     .format(epoch_loss, epoch_cls_loss, epoch_kl_loss,
                             epoch_triplet_loss, epoch_acc,
-                            epoch_acc2, lr_backbone, lr_other))
+                            epoch_acc2, lr_backbone, lr_other, epoch_batches, epoch_samples))
 
         scheduler.step()
+        summary = {
+            "epoch_loss": epoch_loss,
+            "epoch_cls_loss": epoch_cls_loss,
+            "epoch_kl_loss": epoch_kl_loss,
+            "epoch_triplet_loss": epoch_triplet_loss,
+            "epoch_acc": epoch_acc,
+            "epoch_acc2": epoch_acc2,
+            "lr_backbone": lr_backbone,
+            "lr_other": lr_other,
+            "epoch_batches": epoch_batches,
+            "epoch_samples": epoch_samples,
+        }
+        if opt.eval_interval > 0 and ((epoch + 1) % opt.eval_interval == 0 or epoch == num_epochs - 1 or stop_training):
+            current_metric = metric_value(summary, opt.best_metric)
+            if opt.save_best and (best_metric is None or current_metric > best_metric):
+                best_metric = current_metric
+                save_training_checkpoint(model, optimizer, scheduler, opt.name, "best_checkpoint.pth", epoch, best_metric)
+            if opt.save_latest:
+                save_training_checkpoint(model, optimizer, scheduler, opt.name, "latest_checkpoint.pth", epoch, best_metric)
         if epoch % 10 == 9 and epoch >= 110:
             save_network(model, opt.name, epoch)
 
@@ -170,12 +235,14 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes):
         since = time.time()
         logger.info('Training complete in {:.0f}m {:.0f}s'.format(
             time_elapsed // 60, time_elapsed % 60))
+        if stop_training:
+            break
+    return best_metric
 
 
 if __name__ == '__main__':
-    set_seed(666)
-
     opt = get_parse()
+    set_seed(opt.seed)
     str_ids = opt.gpu_ids.split(',')
     gpu_ids = []
     for str_id in str_ids:
@@ -186,21 +253,31 @@ if __name__ == '__main__':
     use_gpu = torch.cuda.is_available()
     opt.use_gpu = use_gpu
     # set gpu ids
-    if len(gpu_ids) > 0:
+    if use_gpu and len(gpu_ids) > 0:
         torch.cuda.set_device(gpu_ids[0])
         cudnn.benchmark = True
 
     dataloaders, class_names, dataset_sizes = make_dataset(opt)
     opt.nclasses = len(class_names)
 
+    checkpoint_dir = copyfiles2checkpoints(opt)
+    save_run_artifacts(opt, checkpoint_dir)
+
     model = make_model(opt)
 
     optimizer_ft, exp_lr_scheduler = make_optimizer(model, opt)
+    start_epoch = 0
+    best_metric = None
+    if opt.resume and os.path.exists(opt.resume):
+        checkpoint = load_training_checkpoint(opt.resume, model, optimizer_ft, exp_lr_scheduler, map_location='cpu')
+        start_epoch = checkpoint.get("epoch", -1) + 1
+        best_metric = checkpoint.get("best_metric")
+        print("Resumed training from:", opt.resume)
+        print("start_epoch:", start_epoch)
+        print("best_metric:", best_metric)
 
     if use_gpu:
         model = model.cuda()
-    # 移动文件到指定文件夹
-    copyfiles2checkpoints(opt)
 
     train_model(model, opt, optimizer_ft, exp_lr_scheduler,
-                dataloaders, dataset_sizes)
+                dataloaders, dataset_sizes, start_epoch=start_epoch, best_metric=best_metric)

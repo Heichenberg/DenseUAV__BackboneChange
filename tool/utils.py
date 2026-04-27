@@ -2,6 +2,9 @@ import os
 import torch
 import yaml
 import random
+import sys
+import platform
+import subprocess
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
@@ -56,11 +59,77 @@ def copyfiles2checkpoints(opt):
     copy_file_or_tree('optimizers', dir_name)
     copy_file_or_tree('third_party', dir_name)
     copy_file_or_tree('tool', dir_name)
+    copy_file_or_tree('train_test', dir_name)
     copy_file_or_tree('train_test_local.sh', dir_name)
 
     # save opts
     with open('%s/opts.yaml' % dir_name, 'w') as fp:
         yaml.dump(vars(opt), fp, default_flow_style=False)
+    return dir_name
+
+
+def write_text_file(path, content):
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(content)
+
+
+def _run_text_command(command):
+    try:
+        result = subprocess.run(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            check=False,
+        )
+        return result.stdout
+    except Exception as exc:
+        return "Command failed: {}\n".format(exc)
+
+
+def collect_runtime_info():
+    lines = [
+        "python_executable: {}".format(sys.executable),
+        "python_version: {}".format(sys.version.replace("\n", " ")),
+        "platform: {}".format(platform.platform()),
+        "torch_version: {}".format(torch.__version__),
+        "torch_cuda_version: {}".format(torch.version.cuda),
+        "cuda_available: {}".format(torch.cuda.is_available()),
+        "cudnn_version: {}".format(torch.backends.cudnn.version()),
+        "numpy_version: {}".format(np.__version__),
+        "opencv_version: {}".format(cv2.__version__),
+    ]
+    if torch.cuda.is_available():
+        lines.append("gpu_count: {}".format(torch.cuda.device_count()))
+        for idx in range(torch.cuda.device_count()):
+            lines.append("gpu_{}: {}".format(idx, torch.cuda.get_device_name(idx)))
+    return "\n".join(lines) + "\n"
+
+
+def save_run_artifacts(opt, checkpoint_dir):
+    command = " ".join(sys.argv)
+    write_text_file(os.path.join(checkpoint_dir, "command.txt"), command + "\n")
+    write_text_file(os.path.join(checkpoint_dir, "runtime_info.txt"), collect_runtime_info())
+    write_text_file(
+        os.path.join(checkpoint_dir, "loaded_weight_report.txt"),
+        "backbone: {}\nbackbone_weight: {}\nload_from: {}\n".format(
+            getattr(opt, "backbone", ""),
+            getattr(opt, "backbone_weight", ""),
+            getattr(opt, "load_from", ""),
+        ),
+    )
+    write_text_file(
+        os.path.join(checkpoint_dir, "pip_freeze.txt"),
+        _run_text_command([sys.executable, "-m", "pip", "freeze"]),
+    )
+    write_text_file(
+        os.path.join(checkpoint_dir, "git_commit.txt"),
+        _run_text_command(["git", "rev-parse", "HEAD"]),
+    )
+    write_text_file(
+        os.path.join(checkpoint_dir, "git_diff.patch"),
+        _run_text_command(["git", "diff", "--", "."]),
+    )
 
 
 def make_weights_for_balanced_classes(images, nclasses):
@@ -107,6 +176,32 @@ def save_network(network, dirname, epoch_label):
     torch.save(network.cpu().state_dict(), save_path)
     if torch.cuda.is_available:
         network.cuda()
+
+
+def save_training_checkpoint(model, optimizer, scheduler, dirname, filename, epoch, best_metric=None):
+    checkpoint_dir = os.path.join("./checkpoints", dirname)
+    if not os.path.isdir(checkpoint_dir):
+        os.mkdir(checkpoint_dir)
+    save_path = os.path.join(checkpoint_dir, filename)
+    payload = {
+        "epoch": epoch,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict() if optimizer is not None else None,
+        "scheduler_state_dict": scheduler.state_dict() if scheduler is not None else None,
+        "best_metric": best_metric,
+    }
+    torch.save(payload, save_path)
+
+
+def load_training_checkpoint(path, model, optimizer=None, scheduler=None, map_location="cpu"):
+    checkpoint = torch.load(path, map_location=map_location)
+    model_state = checkpoint.get("model_state_dict", checkpoint)
+    model.load_state_dict(model_state, strict=False)
+    if optimizer is not None and checkpoint.get("optimizer_state_dict") is not None:
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    if scheduler is not None and checkpoint.get("scheduler_state_dict") is not None:
+        scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+    return checkpoint
 
 
 class UnNormalize(object):

@@ -12,6 +12,10 @@ class SingleBranch(nn.Module):
             opt.in_planes, opt.nclasses, opt.droprate, num_bottleneck=opt.num_bottleneck)
 
     def forward(self, features):
+        if features.ndim == 2:
+            feature = features
+            cls, feature = self.classifier(feature)
+            return [cls, feature]
         global_feature = features[:, 0]
         local_feature = features[:, 1:]
         if self.head_pool == "global":

@@ -3,7 +3,9 @@ import torch
 import numpy as np
 #import time
 import os
-
+# 写一个文件：results.txt
+#计算检索指标：
+# Recall@1 Recall@5 Recall@10 Recall@top1（这里的 top1 实际是 top 1%） AP
 #######################################################################
 # Evaluate
 def evaluate(qf,ql,gf,gl):

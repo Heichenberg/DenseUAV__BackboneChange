@@ -81,11 +81,20 @@ class Backbone(nn.Module):
         elif backbone=="VMamba-Tiny":
             backbone_model = VMambaTinyBackbone(pretrained=getattr(self.opt, "backbone_weight", ""))
             output_channel = backbone_model.output_channel
+        elif backbone=="VMamba-Tiny-Vector":
+            backbone_model = VMambaTinyBackbone(pretrained=getattr(self.opt, "backbone_weight", ""), output_mode="vector")
+            output_channel = backbone_model.output_channel
         elif backbone=="VMamba-Small":
             backbone_model = VMambaSmallBackbone(pretrained=getattr(self.opt, "backbone_weight", ""))
             output_channel = backbone_model.output_channel
+        elif backbone=="VMamba-Small-Vector":
+            backbone_model = VMambaSmallBackbone(pretrained=getattr(self.opt, "backbone_weight", ""), output_mode="vector")
+            output_channel = backbone_model.output_channel
         elif backbone=="VMamba-Base":
             backbone_model = VMambaBaseBackbone(pretrained=getattr(self.opt, "backbone_weight", ""))
+            output_channel = backbone_model.output_channel
+        elif backbone=="VMamba-Base-Vector":
+            backbone_model = VMambaBaseBackbone(pretrained=getattr(self.opt, "backbone_weight", ""), output_mode="vector")
             output_channel = backbone_model.output_channel
         else:
             raise NameError("{} not in the backbone list!!!".format(backbone))

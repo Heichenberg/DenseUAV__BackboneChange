@@ -1,0 +1,108 @@
+import torch
+import torch.nn as nn
+
+from .utils import weights_init_kaiming, weights_init_classifier
+
+
+class GeoTokenHeadV1(nn.Module):
+    def __init__(self, opt):
+        super().__init__()
+        in_channels = opt.in_planes
+        self.proj_dim = getattr(opt, "geo_proj_dim", 384)
+        self.embedding_dim = opt.num_bottleneck
+        self.center_size = getattr(opt, "geo_center_size", 3)
+        self.drop_rate = getattr(opt, "geo_drop_rate", 0.0)
+        active_tokens = getattr(
+            opt,
+            "geo_active_tokens",
+            ("global", "center", "context", "structure"),
+        )
+        self.active_tokens = tuple(active_tokens)
+        valid_tokens = {"global", "center", "context", "structure"}
+        if not self.active_tokens:
+            raise ValueError("GeoTokenHeadV1 requires at least one active token")
+        invalid_tokens = [name for name in self.active_tokens if name not in valid_tokens]
+        if invalid_tokens:
+            raise ValueError(
+                "Unsupported GeoTokenHeadV1 tokens: {}. Valid: {}".format(
+                    invalid_tokens, sorted(valid_tokens)
+                )
+            )
+
+        self.input_norm = nn.LayerNorm(in_channels)
+        self.channel_proj = nn.Linear(in_channels, self.proj_dim)
+        self.structure_score = nn.Conv2d(self.proj_dim, 1, kernel_size=1, bias=True)
+        self.local_avg = nn.AvgPool2d(kernel_size=3, stride=1, padding=1)
+        concat_dim = len(self.active_tokens) * self.proj_dim
+        self.embedding = nn.Linear(concat_dim, self.embedding_dim)
+        self.dropout = nn.Dropout(self.drop_rate) if self.drop_rate > 0 else nn.Identity()
+        self.bnneck = nn.BatchNorm1d(self.embedding_dim)
+        self.bnneck.bias.requires_grad_(False)
+        self.classifier = nn.Linear(self.embedding_dim, opt.nclasses)
+
+        self.channel_proj.apply(weights_init_kaiming)
+        self.structure_score.apply(weights_init_kaiming)
+        self.embedding.apply(weights_init_kaiming)
+        self.bnneck.apply(weights_init_kaiming)
+        self.classifier.apply(weights_init_classifier)
+
+    def _project(self, x):
+        batch, channels, height, width = x.shape
+        tokens = x.flatten(2).transpose(1, 2)
+        tokens = self.input_norm(tokens)
+        tokens = self.channel_proj(tokens)
+        return tokens.transpose(1, 2).reshape(batch, self.proj_dim, height, width)
+
+    def _center_bounds(self, height, width):
+        size = min(self.center_size, height, width)
+        size = max(1, size)
+        row_start = max(0, (height - size) // 2)
+        col_start = max(0, (width - size) // 2)
+        row_end = min(height, row_start + size)
+        col_end = min(width, col_start + size)
+        return row_start, row_end, col_start, col_end
+
+    def _masked_average(self, x, mask):
+        weighted = x * mask
+        denom = mask.sum(dim=(2, 3)).clamp(min=1.0)
+        return weighted.sum(dim=(2, 3)) / denom
+
+    def forward(self, x):
+        if x.ndim != 4:
+            raise ValueError("GeoTokenHeadV1 expects [B, C, H, W], got {}".format(tuple(x.shape)))
+
+        x_proj = self._project(x)
+        batch, channels, height, width = x_proj.shape
+
+        global_token = x_proj.mean(dim=(2, 3))
+
+        row_start, row_end, col_start, col_end = self._center_bounds(height, width)
+        center_region = x_proj[:, :, row_start:row_end, col_start:col_end]
+        center_token = center_region.mean(dim=(2, 3))
+
+        context_mask = x_proj.new_ones((batch, 1, height, width))
+        context_mask[:, :, row_start:row_end, col_start:col_end] = 0
+        if int(context_mask.sum().item()) == 0:
+            context_token = global_token
+        else:
+            context_token = self._masked_average(x_proj, context_mask)
+
+        local_avg = self.local_avg(x_proj)
+        local_residual = (x_proj - local_avg).abs()
+        structure_score = self.structure_score(local_residual).flatten(2)
+        structure_attn = torch.softmax(structure_score, dim=-1).view(batch, 1, height, width)
+        structure_token = (x_proj * structure_attn).sum(dim=(2, 3))
+
+        token_dict = {
+            "global": global_token,
+            "center": center_token,
+            "context": context_token,
+            "structure": structure_token,
+        }
+        selected_tokens = [token_dict[name] for name in self.active_tokens]
+        concat = torch.cat(selected_tokens, dim=1)
+        embedding = self.embedding(concat)
+        embedding = self.dropout(embedding)
+        embedding = self.bnneck(embedding)
+        cls = self.classifier(embedding)
+        return [cls, embedding]

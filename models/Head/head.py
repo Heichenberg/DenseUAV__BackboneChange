@@ -5,6 +5,7 @@ from .LPN import LPN, LPN_CNN
 from .GeM import GeM
 from .NetVLAD import NetVLAD
 from .MixerHead import MixerHeadV1
+from .GeoTokenHead import GeoTokenHeadV1
 
 def make_head(opt):
     return Head(opt)
@@ -38,6 +39,8 @@ class Head(nn.Module):
             head_model = GeM(opt)
         elif head == "MixerHeadV1":
             head_model = MixerHeadV1(opt)
+        elif head == "GeoTokenHeadV1":
+            head_model = GeoTokenHeadV1(opt)
         else:
             raise NameError("{} not in the head list!!!".format(head))
         return head_model

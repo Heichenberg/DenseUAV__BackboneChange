@@ -3,10 +3,22 @@ set -e
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd "$script_dir/.." && pwd)"
+PYTHON_BIN="${PYTHON_BIN:-python}"
+project_python="/home/cjr/miniconda3/envs/denseuav_vmamba/bin/python"
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+    if [ -x "$project_python" ]; then
+        PYTHON_BIN="$project_python"
+    elif command -v python3 >/dev/null 2>&1; then
+        PYTHON_BIN=python3
+    else
+        echo "Python interpreter not found. Activate the project conda env or set PYTHON_BIN=/path/to/python."
+        exit 1
+    fi
+fi
 
 level="C" # A B C
 name="VMamba-Tiny_GeoTokenHeadV1——LevelC"
-root_dir="/home/cjr/GIT_REPO/Compare_Trial/Data/DenseUAV"
+root_dir="/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV"
 data_dir="$root_dir/train"
 gpu_ids=0
 num_worker=""
@@ -49,7 +61,7 @@ case "$level" in
     "A")
         [ -n "$name" ] || name="${backbone_default_name}_levelA_smoke"
         [ -n "$batchsize" ] || batchsize=2
-        [ -n "$num_worker" ] || num_worker=2
+        [ -n "$num_worker" ] || num_worker=0
         [ -n "$num_epochs" ] || num_epochs=1
         [ "$max_train_batches" -gt 0 ] || max_train_batches=20
         disable_autocast=1
@@ -95,7 +107,7 @@ case "$level" in
 esac
 
 cmd=(
-    python train.py
+    "$PYTHON_BIN" train.py
     --name "$name"
     --data_dir "$data_dir"
     --gpu_ids "$gpu_ids"

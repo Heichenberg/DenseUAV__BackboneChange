@@ -1,0 +1,14 @@
+torch==2.2.0
+torchvision==0.17.0
+torchaudio==2.2.0
+packaging
+timm==0.4.12
+pytest
+chardet
+yacs
+termcolor
+submitit
+tensorboardX
+fvcore
+seaborn
+numpy==1.26.4

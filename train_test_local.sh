@@ -1,7 +1,7 @@
 set -e
 
 name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+TripletLoss+klloss"
-root_dir="/home/cjr/GIT_REPO/Compare_Trial/Data/DenseUAV"
+root_dir="/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV"
 data_dir=$root_dir/train
 test_dir=$root_dir/test
 gpu_ids=0

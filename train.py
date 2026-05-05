@@ -99,10 +99,12 @@ def metric_value(summary, metric_name):
 
 def get_context_gate_value(model):
     model_ref = model.module if hasattr(model, "module") else model
-    head = getattr(model_ref, "head", None)
-    if head is None or not hasattr(head, "get_context_gate_value"):
-        return None
-    return head.get_context_gate_value()
+    for module in model_ref.modules():
+        if module is model_ref:
+            continue
+        if hasattr(module, "get_context_gate_value"):
+            return module.get_context_gate_value()
+    return None
 
 
 def write_context_gate_file(opt, model, best_metric=None):

@@ -11,6 +11,8 @@ class GeoTokenHeadV1(nn.Module):
         self.proj_dim = getattr(opt, "geo_proj_dim", 384)
         self.embedding_dim = opt.num_bottleneck
         self.center_size = getattr(opt, "geo_center_size", 3)
+        self.context_size = getattr(opt, "geo_context_size", 7)
+        self.context_dim = getattr(opt, "geo_context_dim", self.proj_dim)
         self.drop_rate = getattr(opt, "geo_drop_rate", 0.0)
         active_tokens = getattr(
             opt,
@@ -28,12 +30,26 @@ class GeoTokenHeadV1(nn.Module):
                     invalid_tokens, sorted(valid_tokens)
                 )
             )
+        if self.context_size not in (5, 7):
+            raise ValueError("GeoTokenHeadV1 geo_context_size currently supports only 5 or 7")
 
         self.input_norm = nn.LayerNorm(in_channels)
         self.channel_proj = nn.Linear(in_channels, self.proj_dim)
+        self.context_proj = (
+            nn.Identity()
+            if self.context_dim == self.proj_dim
+            else nn.Linear(self.proj_dim, self.context_dim)
+        )
         self.structure_score = nn.Conv2d(self.proj_dim, 1, kernel_size=1, bias=True)
         self.local_avg = nn.AvgPool2d(kernel_size=3, stride=1, padding=1)
-        concat_dim = len(self.active_tokens) * self.proj_dim
+        token_dims = {
+            "global": self.proj_dim,
+            "center": self.proj_dim,
+            "context": self.context_dim,
+            "structure": self.proj_dim,
+        }
+        self.concat_dim = sum(token_dims[name] for name in self.active_tokens)
+        concat_dim = self.concat_dim
         self.embedding = nn.Linear(concat_dim, self.embedding_dim)
         self.dropout = nn.Dropout(self.drop_rate) if self.drop_rate > 0 else nn.Identity()
         self.bnneck = nn.BatchNorm1d(self.embedding_dim)
@@ -41,6 +57,7 @@ class GeoTokenHeadV1(nn.Module):
         self.classifier = nn.Linear(self.embedding_dim, opt.nclasses)
 
         self.channel_proj.apply(weights_init_kaiming)
+        self.context_proj.apply(weights_init_kaiming)
         self.structure_score.apply(weights_init_kaiming)
         self.embedding.apply(weights_init_kaiming)
         self.bnneck.apply(weights_init_kaiming)
@@ -55,6 +72,21 @@ class GeoTokenHeadV1(nn.Module):
 
     def _center_bounds(self, height, width):
         size = min(self.center_size, height, width)
+        size = max(1, size)
+        row_start = max(0, (height - size) // 2)
+        col_start = max(0, (width - size) // 2)
+        row_end = min(height, row_start + size)
+        col_end = min(width, col_start + size)
+        return row_start, row_end, col_start, col_end
+
+    def _region_mask(self, batch, height, width, size, x):
+        row_start, row_end, col_start, col_end = self._center_bounds_for_size(height, width, size)
+        mask = x.new_zeros((batch, 1, height, width))
+        mask[:, :, row_start:row_end, col_start:col_end] = 1
+        return mask
+
+    def _center_bounds_for_size(self, height, width, size):
+        size = min(size, height, width)
         size = max(1, size)
         row_start = max(0, (height - size) // 2)
         col_start = max(0, (width - size) // 2)
@@ -80,12 +112,14 @@ class GeoTokenHeadV1(nn.Module):
         center_region = x_proj[:, :, row_start:row_end, col_start:col_end]
         center_token = center_region.mean(dim=(2, 3))
 
-        context_mask = x_proj.new_ones((batch, 1, height, width))
-        context_mask[:, :, row_start:row_end, col_start:col_end] = 0
+        center_mask = self._region_mask(batch, height, width, self.center_size, x_proj)
+        outer_mask = self._region_mask(batch, height, width, self.context_size, x_proj)
+        context_mask = (outer_mask - center_mask).clamp(min=0)
         if int(context_mask.sum().item()) == 0:
-            context_token = global_token
+            context_token_raw = global_token
         else:
-            context_token = self._masked_average(x_proj, context_mask)
+            context_token_raw = self._masked_average(x_proj, context_mask)
+        context_token = self.context_proj(context_token_raw)
 
         local_avg = self.local_avg(x_proj)
         local_residual = (x_proj - local_avg).abs()

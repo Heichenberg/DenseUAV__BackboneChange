@@ -299,8 +299,7 @@ class WeightedSoftTripletLoss(nn.Module):
         dist_ap, dist_an = hard_example_mining(dist, targets)
         # ap_ = torch.sum(torch.exp(dist_ap)/torch.sum(torch.exp(dist_ap))*dist_ap)
         # an_ = torch.sum(torch.exp(-dist_an)/torch.sum(torch.exp(-dist_an))*dist_an)
-        loss = torch.log(1+torch.exp(self.alpha*(dist_ap-dist_an))).mean()
+        loss = torch.nn.functional.softplus(self.alpha * (dist_ap - dist_an)).mean()
         return loss
-
 
 

@@ -1,6 +1,6 @@
 set -e
 
-name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+TripletLoss+klloss-GCR5_D384"
+name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+TripletLoss+klloss--G"
 root_dir="/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV"
 data_dir=$root_dir/train
 test_dir=$root_dir/test
@@ -25,12 +25,12 @@ ra="satellite"  # random affine
 re="satellite"  # random erasing
 cj="no"  # color jitter
 rr="uav"  # random rotate
-num_epochs=119
+num_epochs=120
 
 # 新增参数：尽量只保留这三个
-short_train=${SHORT_TRAIN:-true}
+short_train=${SHORT_TRAIN:-false}
 short_train_epochs=${SHORT_EPOCHS:-60}
-token_mode=${TOKEN_MODE:-GCR5_D384}
+token_mode=${TOKEN_MODE:-G}
 
 case "$token_mode" in
     G)
@@ -51,46 +51,33 @@ case "$token_mode" in
     GCRS)
         backbone="VMamba-Tiny-_GeoTokenHeadV1_GCRS"
         ;;
-    GCR5_D384)
-        backbone="VMamba-Tiny-_GeoTokenHeadV1_GCR5_D384"
-        ;;
-    GCR5_D192)
-        backbone="VMamba-Tiny-_GeoTokenHeadV1_GCR5_D192"
-        ;;
     *)
         echo "Unsupported TOKEN_MODE: $token_mode"
-        echo "Supported: G, GC, GR, GS, GCR, GCRS, GCR5_D384, GCR5_D192"
+        echo "Supported: G, GC, GR, GS, GCR, GCRS"
         exit 1
         ;;
 esac
 
-if [ "$short_train" = "true" ] || [ "$short_train" = "1" ]; then
+if [ "$short_train" = "true" ]; then
     num_epochs=$short_train_epochs
 fi
 
 [ -n "$name" ] || name="${backbone}_${head}"
-if [ "$token_mode" != "GCRS" ] && [[ "$name" != *"$token_mode"* ]]; then
+if [ "$token_mode" != "GCRS" ]; then
     name="${name}_${token_mode}"
 fi
-if [ "$short_train" = "true" ] || [ "$short_train" = "1" ]; then
+if [ "$short_train" = "true" ]; then
     name="${name}_short${short_train_epochs}"
 fi
 
-train_cmd="python train.py --name $name --data_dir $data_dir --gpu_ids $gpu_ids --sample_num $sample_num \
+python train.py --name $name --data_dir $data_dir --gpu_ids $gpu_ids --sample_num $sample_num \
                 --block $block --lr $lr --num_worker $num_worker --head $head --head_pool $head_pool \
                 --num_bottleneck $num_bottleneck --backbone $backbone --backbone_weight $backbone_weight --h $h --w $w --batchsize $batchsize --load_from $load_from \
                 --ra $ra --re $re --cj $cj --rr $rr --cls_loss $cls_loss --feature_loss $feature_loss --kl_loss $kl_loss \
-                --num_epochs $num_epochs"
-
-if [ "${DRY_RUN:-0}" = "1" ]; then
-    echo "$train_cmd"
-    exit 0
-fi
-
-$train_cmd
+                --num_epochs $num_epochs
 
 cd checkpoints/$name
-python test.py --name $name --test_dir $test_dir --gpu_ids $gpu_ids --num_worker $num_worker --batchsize 128 --checkpoint latest_checkpoint.pth
+python test.py --name $name --test_dir $test_dir --gpu_ids $gpu_ids --num_worker $num_worker --batchsize 128
 python evaluate_gpu.py
 python evaluateDistance.py --root_dir $root_dir
 cd ../../

@@ -242,7 +242,9 @@ def load_network(opt):
     model = make_model(opt)
     # print('Load the model from %s' % save_filename)
     network = model
-    network.load_state_dict(torch.load(save_filename))
+    checkpoint = torch.load(save_filename)
+    state_dict = checkpoint.get("model_state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
+    network.load_state_dict(state_dict)
     return network
 
 

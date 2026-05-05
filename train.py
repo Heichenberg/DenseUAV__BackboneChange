@@ -97,6 +97,22 @@ def metric_value(summary, metric_name):
     return summary["epoch_acc"]
 
 
+def get_context_gate_value(model):
+    model_ref = model.module if hasattr(model, "module") else model
+    head = getattr(model_ref, "head", None)
+    if head is None or not hasattr(head, "get_context_gate_value"):
+        return None
+    return head.get_context_gate_value()
+
+
+def write_context_gate_file(opt, model, best_metric=None):
+    gate_value = get_context_gate_value(model)
+    gate_path = os.path.join("checkpoints", opt.name, "context_gate.txt")
+    with open(gate_path, "w") as f:
+        f.write("context_gate={}\n".format("None" if gate_value is None else "{:.8f}".format(gate_value)))
+        f.write("best_metric={}\n".format(best_metric))
+
+
 def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, start_epoch=0, best_metric=None):
     logger = get_logger(
         "checkpoints/{}/train.log".format(opt.name))
@@ -207,6 +223,9 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
                     .format(epoch_loss, epoch_cls_loss, epoch_kl_loss,
                             epoch_triplet_loss, epoch_acc,
                             epoch_acc2, lr_backbone, lr_other, epoch_batches, epoch_samples))
+        context_gate = get_context_gate_value(model)
+        if context_gate is not None:
+            logger.info("GeoToken context_gate: {:.4f}".format(context_gate))
 
         scheduler.step()
         summary = {
@@ -237,6 +256,7 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
             time_elapsed // 60, time_elapsed % 60))
         if stop_training:
             break
+    write_context_gate_file(opt, model, best_metric)
     return best_metric
 
 

@@ -1,6 +1,6 @@
 set -e
 
-name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+TripletLoss+klloss-GCR5_D384"
+name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+TripletLoss+klloss-GCR5_D192_GATE"
 root_dir="/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV"
 data_dir=$root_dir/train
 test_dir=$root_dir/test
@@ -28,9 +28,9 @@ rr="uav"  # random rotate
 num_epochs=119
 
 # 新增参数：尽量只保留这三个
-short_train=${SHORT_TRAIN:-true}
+short_train=${SHORT_TRAIN:-false}
 short_train_epochs=${SHORT_EPOCHS:-60}
-token_mode=${TOKEN_MODE:-GCR5_D384}
+token_mode=${TOKEN_MODE:-GCR5_D192_GATE}
 
 case "$token_mode" in
     G)
@@ -57,9 +57,12 @@ case "$token_mode" in
     GCR5_D192)
         backbone="VMamba-Tiny-_GeoTokenHeadV1_GCR5_D192"
         ;;
+    GCR5_D192_GATE)
+        backbone="VMamba-Tiny-_GeoTokenHeadV1_GCR5_D192_GATE"
+        ;;
     *)
         echo "Unsupported TOKEN_MODE: $token_mode"
-        echo "Supported: G, GC, GR, GS, GCR, GCRS, GCR5_D384, GCR5_D192"
+        echo "Supported: G, GC, GR, GS, GCR, GCRS, GCR5_D384, GCR5_D192, GCR5_D192_GATE"
         exit 1
         ;;
 esac

@@ -7,24 +7,27 @@ import torch
 
 def normalize_model_alias(opt):
     alias_map = {
-        "VMamba-Tiny-_GeoTokenHeadV1": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context", "structure"), 7, 384),
-        "VMamba-Tiny-_GeoTokenHeadV1_G": ("VMamba-Tiny", "GeoTokenHeadV1", ("global",), 7, 384),
-        "VMamba-Tiny-_GeoTokenHeadV1_GC": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center"), 7, 384),
-        "VMamba-Tiny-_GeoTokenHeadV1_GR": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "context"), 7, 384),
-        "VMamba-Tiny-_GeoTokenHeadV1_GS": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "structure"), 7, 384),
-        "VMamba-Tiny-_GeoTokenHeadV1_GCR": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context"), 7, 384),
-        "VMamba-Tiny-_GeoTokenHeadV1_GCRS": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context", "structure"), 7, 384),
-        "VMamba-Tiny-_GeoTokenHeadV1_GCR5_D384": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context"), 5, 384),
-        "VMamba-Tiny-_GeoTokenHeadV1_GCR5_D192": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context"), 5, 192),
+        "VMamba-Tiny-_GeoTokenHeadV1": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context", "structure"), 7, 384, False, 0.1),
+        "VMamba-Tiny-_GeoTokenHeadV1_G": ("VMamba-Tiny", "GeoTokenHeadV1", ("global",), 7, 384, False, 0.1),
+        "VMamba-Tiny-_GeoTokenHeadV1_GC": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center"), 7, 384, False, 0.1),
+        "VMamba-Tiny-_GeoTokenHeadV1_GR": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "context"), 7, 384, False, 0.1),
+        "VMamba-Tiny-_GeoTokenHeadV1_GS": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "structure"), 7, 384, False, 0.1),
+        "VMamba-Tiny-_GeoTokenHeadV1_GCR": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context"), 7, 384, False, 0.1),
+        "VMamba-Tiny-_GeoTokenHeadV1_GCRS": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context", "structure"), 7, 384, False, 0.1),
+        "VMamba-Tiny-_GeoTokenHeadV1_GCR5_D384": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context"), 5, 384, False, 0.1),
+        "VMamba-Tiny-_GeoTokenHeadV1_GCR5_D192": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context"), 5, 192, False, 0.1),
+        "VMamba-Tiny-_GeoTokenHeadV1_GCR5_D192_GATE": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context"), 5, 192, True, 0.1),
     }
     alias = getattr(opt, "backbone", "")
     if alias in alias_map:
-        real_backbone, real_head, active_tokens, context_size, context_dim = alias_map[alias]
+        real_backbone, real_head, active_tokens, context_size, context_dim, context_gate, context_gate_init = alias_map[alias]
         opt.backbone = real_backbone
         opt.head = real_head
         opt.geo_active_tokens = active_tokens
         opt.geo_context_size = context_size
         opt.geo_context_dim = context_dim
+        opt.geo_context_gate = context_gate
+        opt.geo_context_gate_init = context_gate_init
     return opt
 
 

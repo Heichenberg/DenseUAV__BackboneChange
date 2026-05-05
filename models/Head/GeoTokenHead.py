@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn as nn
 
@@ -13,6 +15,8 @@ class GeoTokenHeadV1(nn.Module):
         self.center_size = getattr(opt, "geo_center_size", 3)
         self.context_size = getattr(opt, "geo_context_size", 7)
         self.context_dim = getattr(opt, "geo_context_dim", self.proj_dim)
+        self.context_gate_enabled = getattr(opt, "geo_context_gate", False)
+        self.context_gate_init = getattr(opt, "geo_context_gate_init", 0.1)
         self.drop_rate = getattr(opt, "geo_drop_rate", 0.0)
         active_tokens = getattr(
             opt,
@@ -40,6 +44,12 @@ class GeoTokenHeadV1(nn.Module):
             if self.context_dim == self.proj_dim
             else nn.Linear(self.proj_dim, self.context_dim)
         )
+        if self.context_gate_enabled:
+            gate_init = min(max(self.context_gate_init, 1e-4), 1 - 1e-4)
+            gate_logit = math.log(gate_init / (1 - gate_init))
+            self.context_gate_logit = nn.Parameter(torch.tensor(gate_logit, dtype=torch.float32))
+        else:
+            self.context_gate_logit = None
         self.structure_score = nn.Conv2d(self.proj_dim, 1, kernel_size=1, bias=True)
         self.local_avg = nn.AvgPool2d(kernel_size=3, stride=1, padding=1)
         token_dims = {
@@ -99,6 +109,11 @@ class GeoTokenHeadV1(nn.Module):
         denom = mask.sum(dim=(2, 3)).clamp(min=1.0)
         return weighted.sum(dim=(2, 3)) / denom
 
+    def get_context_gate_value(self):
+        if self.context_gate_logit is None:
+            return None
+        return torch.sigmoid(self.context_gate_logit).detach().item()
+
     def forward(self, x):
         if x.ndim != 4:
             raise ValueError("GeoTokenHeadV1 expects [B, C, H, W], got {}".format(tuple(x.shape)))
@@ -120,6 +135,8 @@ class GeoTokenHeadV1(nn.Module):
         else:
             context_token_raw = self._masked_average(x_proj, context_mask)
         context_token = self.context_proj(context_token_raw)
+        if self.context_gate_logit is not None and "context" in self.active_tokens:
+            context_token = torch.sigmoid(self.context_gate_logit) * context_token
 
         local_avg = self.local_avg(x_proj)
         local_residual = (x_proj - local_avg).abs()

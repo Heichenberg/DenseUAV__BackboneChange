@@ -1,0 +1,7 @@
+python3 Vmamba_GCRS/R_token_visualize/visualize_r_token.py \
+  --checkpoint_dir checkpoints/VMamba-Tiny_GeoTokenHeadV1-CELOSS+TripletLoss+klloss-GCR5_D192_GATE \
+  --checkpoint latest_checkpoint.pth \
+  --test_dir /home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV/test \
+  --view both \
+  --num_samples 8 \
+  --gpu_ids 0

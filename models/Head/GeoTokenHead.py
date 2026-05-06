@@ -65,6 +65,11 @@ class GeoTokenHeadV1(nn.Module):
         self.bnneck = nn.BatchNorm1d(self.embedding_dim)
         self.bnneck.bias.requires_grad_(False)
         self.classifier = nn.Linear(self.embedding_dim, opt.nclasses)
+        self.last_x_proj = None
+        self.last_center_mask = None
+        self.last_context_mask = None
+        self.last_structure_attn = None
+        self.last_context_gate = None
 
         self.channel_proj.apply(weights_init_kaiming)
         self.context_proj.apply(weights_init_kaiming)
@@ -143,6 +148,14 @@ class GeoTokenHeadV1(nn.Module):
         structure_score = self.structure_score(local_residual).flatten(2)
         structure_attn = torch.softmax(structure_score, dim=-1).view(batch, 1, height, width)
         structure_token = (x_proj * structure_attn).sum(dim=(2, 3))
+        self.last_x_proj = x_proj.detach()
+        self.last_center_mask = center_mask.detach()
+        self.last_context_mask = context_mask.detach()
+        self.last_structure_attn = structure_attn.detach()
+        if self.context_gate_logit is not None:
+            self.last_context_gate = torch.sigmoid(self.context_gate_logit).detach()
+        else:
+            self.last_context_gate = None
 
         token_dict = {
             "global": global_token,

@@ -8,6 +8,7 @@ import torch
 def normalize_model_alias(opt):
     alias_map = {
         "VMamba-Tiny-_GeoTokenHeadV1": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context", "structure"), 7, 384, False, 0.1),
+        "VMamba-Tiny-_GeoTokenHeadV1_C": ("VMamba-Tiny", "GeoTokenHeadV1", ("center",), 7, 384, False, 0.1),
         "VMamba-Tiny-_GeoTokenHeadV1_G": ("VMamba-Tiny", "GeoTokenHeadV1", ("global",), 7, 384, False, 0.1),
         "VMamba-Tiny-_GeoTokenHeadV1_GC": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center"), 7, 384, False, 0.1),
         "VMamba-Tiny-_GeoTokenHeadV1_GR": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "context"), 7, 384, False, 0.1),

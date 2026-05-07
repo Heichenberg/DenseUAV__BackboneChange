@@ -21,6 +21,7 @@ def normalize_model_alias(opt):
         "VMamba-Tiny-_GeoTokenHeadV1_C5": ("VMamba-Tiny", "GeoTokenHeadV1", ("center",), 5, 7, 384, False, 0.1),
         "VMamba-Tiny-_GeoTokenHeadV1_GC5": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center"), 5, 7, 384, False, 0.1),
         "VMamba-Tiny-_GeoTokenHeadV1_GC5R_D192": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context"), 5, 7, 192, False, 0.1),
+        "VMamba-Tiny-_GeoTokenHeadV1_GC5R_D192_GATE": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context"), 5, 7, 192, True, 0.1),
     }
     alias = getattr(opt, "backbone", "")
     if alias in alias_map:

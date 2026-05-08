@@ -53,6 +53,7 @@ def copyfiles2checkpoints(opt):
     copy_file_or_tree('test.py', dir_name)
     copy_file_or_tree('evaluate_gpu.py', dir_name)
     copy_file_or_tree('evaluateDistance.py', dir_name)
+    copy_file_or_tree('plot_ema_loss.py', dir_name)
     copy_file_or_tree('datasets', dir_name)
     copy_file_or_tree('losses', dir_name)
     copy_file_or_tree('models', dir_name)

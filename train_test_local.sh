@@ -1,14 +1,14 @@
 set -e
 
-name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+TripletLoss+klloss--GC5R_D192_GATE-bblr=0.001-headlr=0.005"
+name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+TripletLoss+klloss--GC5R_D192"
 root_dir="/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV"
 data_dir=$root_dir/train
 test_dir=$root_dir/test
 gpu_ids=0
 num_worker=8
 lr=0.005
-backbone_lr=${BACKBONE_LR:-0.001}
-head_lr=${HEAD_LR:-0.005}
+backbone_lr=${BACKBONE_LR:-0.005}
+head_lr=${HEAD_LR:-0.01}
 batchsize=8
 sample_num=1
 block=1
@@ -32,7 +32,7 @@ num_epochs=120
 # 新增参数：尽量只保留这三个
 short_train=${SHORT_TRAIN:-false}
 short_train_epochs=${SHORT_EPOCHS:-60}
-token_mode=${TOKEN_MODE:-GC5R_D192_GATE}
+token_mode=${TOKEN_MODE:-GC5R_D192}
 
 case "$token_mode" in
     C)
@@ -116,4 +116,5 @@ cd checkpoints/$name
 python test.py --name $name --test_dir $test_dir --gpu_ids $gpu_ids --num_worker $num_worker --batchsize 128 --checkpoint latest_checkpoint.pth
 python evaluate_gpu.py
 python evaluateDistance.py --root_dir $root_dir
+python plot_ema_loss.py
 cd ../../

@@ -1,4 +1,4 @@
-name="baseline"
+name="baseline-seed1"
 root_dir="/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV"
 data_dir=$root_dir/train
 test_dir=$root_dir/test

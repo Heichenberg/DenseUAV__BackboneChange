@@ -1,12 +1,14 @@
 set -e
 
-name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+TripletLoss+klloss--GC5R_D192_GATE-lr=0.001"
+name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+TripletLoss+klloss--GC5R_D192_GATE-bblr=0.001-headlr=0.005"
 root_dir="/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV"
 data_dir=$root_dir/train
 test_dir=$root_dir/test
 gpu_ids=0
 num_worker=8
-lr=0.001
+lr=0.005
+backbone_lr=${BACKBONE_LR:-0.001}
+head_lr=${HEAD_LR:-0.005}
 batchsize=8
 sample_num=1
 block=1
@@ -93,9 +95,12 @@ fi
 if [ "$short_train" = "true" ] || [ "$short_train" = "1" ]; then
     name="${name}_short${short_train_epochs}"
 fi
+if [ "$backbone_lr" != "0" ] || [ "$head_lr" != "0" ]; then
+    name="${name}_blr${backbone_lr}_hlr${head_lr}"
+fi
 
 train_cmd="python train.py --name $name --data_dir $data_dir --gpu_ids $gpu_ids --sample_num $sample_num \
-                --block $block --lr $lr --num_worker $num_worker --head $head --head_pool $head_pool \
+                --block $block --lr $lr --backbone_lr $backbone_lr --head_lr $head_lr --num_worker $num_worker --head $head --head_pool $head_pool \
                 --num_bottleneck $num_bottleneck --backbone $backbone --backbone_weight $backbone_weight --h $h --w $w --batchsize $batchsize --load_from $load_from \
                 --ra $ra --re $re --cj $cj --rr $rr --cls_loss $cls_loss --feature_loss $feature_loss --kl_loss $kl_loss \
                 --num_epochs $num_epochs"

@@ -46,6 +46,10 @@ def get_parse():
     parser.add_argument('--warm_epoch', default=0, type=int,
                         help='the first K epoch that needs warm up')
     parser.add_argument('--lr', default=0.01, type=float, help='learning rate')
+    parser.add_argument('--backbone_lr', default=0.0, type=float,
+                        help='learning rate for backbone param group; <=0 means use --lr')
+    parser.add_argument('--head_lr', default=0.0, type=float,
+                        help='learning rate for head / non-backbone param group; <=0 means use --lr')
     parser.add_argument('--DA', action='store_true',
                         help='use Color Data Augmentation')
     parser.add_argument('--droprate', default=0.5,
@@ -86,6 +90,10 @@ def get_parse():
     opt = parser.parse_args()
     if opt.disable_autocast:
         opt.autocast = False
+    if opt.backbone_lr <= 0:
+        opt.backbone_lr = opt.lr
+    if opt.head_lr <= 0:
+        opt.head_lr = opt.lr
     print(opt)
     return opt
 

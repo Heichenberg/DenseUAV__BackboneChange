@@ -3,13 +3,34 @@ from torch.optim import lr_scheduler
 
 
 def make_optimizer(model,opt):
-    ignored_params = []
-    ignored_params += list(map(id, model.backbone.parameters()))
-    extra_params = filter(lambda p: id(p) not in ignored_params, model.parameters())
-    base_params = filter(lambda p: id(p) in ignored_params, model.parameters())
+    backbone_params = []
+    head_params = []
+    seen_params = set()
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        param_id = id(param)
+        if param_id in seen_params:
+            raise ValueError("Duplicate parameter detected while building optimizer: {}".format(name))
+        seen_params.add(param_id)
+        if name.startswith("backbone."):
+            backbone_params.append(param)
+        else:
+            head_params.append(param)
+
+    if len(backbone_params) == 0:
+        raise ValueError("No trainable backbone parameters found for optimizer group 0")
+    if len(head_params) == 0:
+        raise ValueError("No trainable head/other parameters found for optimizer group 1")
+
+    print("backbone lr = {}".format(opt.backbone_lr))
+    print("head lr = {}".format(opt.head_lr))
+    print("num backbone params = {}".format(sum(p.numel() for p in backbone_params)))
+    print("num head params = {}".format(sum(p.numel() for p in head_params)))
+
     optimizer_ft = optim.SGD([
-        {'params': base_params, 'lr': 0.3 * opt.lr},
-        {'params': extra_params, 'lr': opt.lr}
+        {'params': backbone_params, 'lr': opt.backbone_lr},
+        {'params': head_params, 'lr': opt.head_lr}
     ], weight_decay=5e-4, momentum=0.9, nesterov=True)
 
 

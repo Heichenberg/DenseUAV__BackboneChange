@@ -1,5 +1,6 @@
 from torchvision import transforms
-from .Dataloader_University import Sampler_University, Dataloader_University, train_collate_fn
+import os
+from .Dataloader_University import DSSSampler_University, Sampler_University, Dataloader_University, train_collate_fn
 from .autoaugment import ImageNetPolicy
 import torch
 from .queryDataset import RotateAndCrop, RandomCrop, RandomErasing
@@ -81,8 +82,25 @@ def make_dataset(opt):
         max_ids=getattr(opt, "max_ids", 0),
         id_subset_file=getattr(opt, "id_subset_file", ""),
     )
-    samper = Sampler_University(
-        image_datasets, batchsize=opt.batchsize, sample_num=opt.sample_num)
+    if getattr(opt, "train_strategy", "origin") == "dss":
+        gps_file = getattr(opt, "dss_gps_file", "")
+        if not gps_file:
+            gps_file = os.path.join(os.path.dirname(opt.data_dir), "Dense_GPS_train.txt")
+        samper = DSSSampler_University(
+            image_datasets,
+            batchsize=opt.batchsize,
+            sample_num=opt.sample_num,
+            gps_file=gps_file,
+            gds_topk=getattr(opt, "dss_gds_topk", 64),
+            dss_start_epoch=getattr(opt, "dss_start_epoch", 0),
+            gds_ratio=getattr(opt, "dss_gds_ratio", 0.5),
+            fss_ratio=getattr(opt, "dss_fss_ratio", 0.0),
+            rs_ratio=getattr(opt, "dss_rs_ratio", 0.5),
+            cache_dir=getattr(opt, "dss_cache_dir", ""),
+        )
+    else:
+        samper = Sampler_University(
+            image_datasets, batchsize=opt.batchsize, sample_num=opt.sample_num)
     dataloaders = torch.utils.data.DataLoader(image_datasets, batch_size=opt.batchsize,
                                               sampler=samper, num_workers=opt.num_worker, pin_memory=True, collate_fn=train_collate_fn)
     dataset_sizes = {x: len(image_datasets) *

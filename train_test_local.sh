@@ -1,6 +1,6 @@
 set -e
 
-name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+TripletLoss+klloss--GC5R_D192"
+name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+HardMiningTripletLoss+klloss--GC5R_D192"
 root_dir="/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV"
 data_dir=$root_dir/train
 test_dir=$root_dir/test
@@ -9,8 +9,20 @@ num_worker=8
 lr=0.005
 backbone_lr=${BACKBONE_LR:-0.005}
 head_lr=${HEAD_LR:-0.01}
-batchsize=8
-sample_num=1
+batchsize=16
+sample_num=2
+train_strategy=${TRAIN_STRATEGY:-dss}  # origin dss
+dss_start_epoch=${DSS_START_EPOCH:-5}
+dss_gds_topk=${DSS_GDS_TOPK:-32}
+dss_gds_ratio=${DSS_GDS_RATIO:-0.4}
+dss_fss_ratio=${DSS_FSS_RATIO:-0.2}
+dss_fss_topk=${DSS_FSS_TOPK:-32}
+dss_fss_start_epoch=${DSS_FSS_START_EPOCH:-15}
+dss_fss_samples_per_id=${DSS_FSS_SAMPLES_PER_ID:-1}
+dss_rs_ratio=${DSS_RS_RATIO:-0.4}
+dss_fss_update_interval=${DSS_FSS_UPDATE_INTERVAL:-15}
+dss_gps_file=${DSS_GPS_FILE:-"$root_dir/Dense_GPS_train.txt"}
+dss_cache_dir=${DSS_CACHE_DIR:-"$root_dir/dss_cache"}
 block=1
 num_bottleneck=512
 backbone="VMamba-Tiny" # VMamba-Tiny VMamba-Small VMamba-Base
@@ -18,7 +30,7 @@ backbone_weight="pretrained/backbones/vmamba/tiny/vssm1_tiny_0230s_ckpt_epoch_26
 head="GeoTokenHeadV1"
 head_pool="avg" # global avg max avg+max
 cls_loss="CELoss" # CELoss FocalLoss
-feature_loss="WeightedSoftTripletLoss" # TripletLoss HardMiningTripletLoss WeightedSoftTripletLoss ContrastiveLoss
+feature_loss="HardMiningTripletLoss" # TripletLoss HardMiningTripletLoss WeightedSoftTripletLoss ContrastiveLoss
 kl_loss="KLLoss" # KLLoss
 h=224
 w=224
@@ -29,11 +41,14 @@ cj="no"  # color jitter
 rr="uav"  # random rotate
 num_epochs=120
 
-# 新增参数：尽量只保留这三个
-short_train=${SHORT_TRAIN:-false}
-short_train_epochs=${SHORT_EPOCHS:-60}
-token_mode=${TOKEN_MODE:-GC5R_D192}
+# 短训参数
+short_train=${SHORT_TRAIN:-true}
+short_train_epochs=${SHORT_EPOCHS:-45}
 
+
+
+#训练token mode
+token_mode=${TOKEN_MODE:-GC5R_D192}
 case "$token_mode" in
     C)
         backbone="VMamba-Tiny-_GeoTokenHeadV1_C"
@@ -95,11 +110,15 @@ fi
 if [ "$short_train" = "true" ] || [ "$short_train" = "1" ]; then
     name="${name}_short${short_train_epochs}"
 fi
+if [ "$train_strategy" = "dss" ]; then
+    name="${name}_dssv1"
+fi
 if [ "$backbone_lr" != "0" ] || [ "$head_lr" != "0" ]; then
     name="${name}_blr${backbone_lr}_hlr${head_lr}"
 fi
 
 train_cmd="python train.py --name $name --data_dir $data_dir --gpu_ids $gpu_ids --sample_num $sample_num \
+                --train_strategy $train_strategy --dss_gps_file $dss_gps_file --dss_start_epoch $dss_start_epoch --dss_gds_topk $dss_gds_topk --dss_gds_ratio $dss_gds_ratio --dss_fss_ratio $dss_fss_ratio --dss_fss_topk $dss_fss_topk --dss_fss_start_epoch $dss_fss_start_epoch --dss_fss_samples_per_id $dss_fss_samples_per_id --dss_rs_ratio $dss_rs_ratio --dss_fss_update_interval $dss_fss_update_interval --dss_cache_dir $dss_cache_dir \
                 --block $block --lr $lr --backbone_lr $backbone_lr --head_lr $head_lr --num_worker $num_worker --head $head --head_pool $head_pool \
                 --num_bottleneck $num_bottleneck --backbone $backbone --backbone_weight $backbone_weight --h $h --w $w --batchsize $batchsize --load_from $load_from \
                 --ra $ra --re $re --cj $cj --rr $rr --cls_loss $cls_loss --feature_loss $feature_loss --kl_loss $kl_loss \

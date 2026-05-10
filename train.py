@@ -14,6 +14,7 @@ from optimizers.make_optimizer import make_optimizer
 # from models.model import make_model
 from models.taskflow import make_model
 from datasets.make_dataloader import make_dataset
+from datasets.dss_fss import build_fss_neighbors, should_update_fss
 from tool.utils import save_network, copyfiles2checkpoints, get_preds, get_logger, calc_flops_params, set_seed, save_training_checkpoint, load_training_checkpoint, save_run_artifacts
 import warnings
 from losses.loss import Loss
@@ -64,6 +65,30 @@ def get_parse():
     parser.add_argument('--kl_loss', default="no", type=str, help='loss type of mutual learning')
     parser.add_argument('--sample_num', default=1, type=int,
                         help='num of repeat sampling')
+    parser.add_argument('--train_strategy', default='origin', type=str, choices=['origin', 'dss'],
+                        help='training sampler strategy')
+    parser.add_argument('--dss_gps_file', default="", type=str,
+                        help='GPS file used by DSS GDS sampling; defaults to <data_root>/Dense_GPS_train.txt')
+    parser.add_argument('--dss_start_epoch', default=0, type=int,
+                        help='epoch to start DSS sampling')
+    parser.add_argument('--dss_gds_topk', default=64, type=int,
+                        help='number of nearest geographic negative IDs stored per anchor')
+    parser.add_argument('--dss_gds_ratio', default=0.5, type=float,
+                        help='DSS v1 ratio for GDS negatives inside the non-anchor part of a batch')
+    parser.add_argument('--dss_fss_ratio', default=0.0, type=float,
+                        help='DSS ratio for FSS negatives; ignored until fss_neighbors is populated')
+    parser.add_argument('--dss_fss_topk', default=64, type=int,
+                        help='number of nearest feature negative IDs stored per anchor')
+    parser.add_argument('--dss_fss_start_epoch', default=10, type=int,
+                        help='0-based epoch to start refreshing DSS FSS neighbors')
+    parser.add_argument('--dss_fss_samples_per_id', default=1, type=int,
+                        help='number of random satellite-drone pairs sampled per ID when building FSS')
+    parser.add_argument('--dss_rs_ratio', default=0.5, type=float,
+                        help='DSS v1 ratio for random IDs inside the non-anchor part of a batch')
+    parser.add_argument('--dss_fss_update_interval', default=10, type=int,
+                        help='planned interval for refreshing FSS neighbors')
+    parser.add_argument('--dss_cache_dir', default="", type=str,
+                        help='cache dir for dataset-level DSS files; defaults to <DenseUAV>/dss_cache')
     parser.add_argument('--num_epochs', default=120, type=int, help='total epoches for training')
     parser.add_argument('--num_bottleneck', default=512, type=int, help='the dimensions for embedding the feature')
     parser.add_argument('--load_from', default="", type=str, help='checkpoints path for pre-loading')
@@ -142,7 +167,6 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
         logger.info('Epoch {}/{}'.format(epoch, num_epochs - 1))
         logger.info('-' * 50)
 
-        model.train(True)  # Set model to training mode
         running_cls_loss = 0.0
         running_triplet = 0.0
         running_kl_loss = 0.0
@@ -152,6 +176,13 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
         epoch_batches = 0
         epoch_samples = 0
         stop_training = False
+        if hasattr(dataloaders.sampler, "set_epoch"):
+            dataloaders.sampler.set_epoch(epoch)
+        if hasattr(dataloaders.sampler, "update_fss_neighbors") and should_update_fss(epoch, opt):
+            fss_neighbors = build_fss_neighbors(model, dataloaders.dataset, opt, logger=logger, epoch=epoch)
+            dataloaders.sampler.update_fss_neighbors(fss_neighbors)
+
+        model.train(True)  # Set model to training mode
         for data, data3 in dataloaders:
             if opt.max_train_batches > 0 and epoch_batches >= opt.max_train_batches:
                 logger.info('Reached max_train_batches=%d for epoch %d', opt.max_train_batches, epoch)
@@ -233,6 +264,8 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
                     .format(epoch_loss, epoch_cls_loss, epoch_kl_loss,
                             epoch_triplet_loss, epoch_acc,
                             epoch_acc2, lr_backbone, lr_other, epoch_batches, epoch_samples))
+        if hasattr(dataloaders.sampler, "last_stats") and dataloaders.sampler.last_stats:
+            logger.info("DSS sampler stats: {}".format(dataloaders.sampler.last_stats))
         context_gate = get_context_gate_value(model)
         if context_gate is not None:
             logger.info("GeoToken context_gate: {:.4f}".format(context_gate))

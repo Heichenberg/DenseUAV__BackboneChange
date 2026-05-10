@@ -175,6 +175,14 @@ class DSSSampler_University(object):
     def update_fss_neighbors(self, neighbors=None):
         self.fss_neighbors = self._validate_neighbors(neighbors, "FSS") if neighbors is not None else None
 
+    def set_dss_ratios(self, gds_ratio=None, fss_ratio=None, rs_ratio=None):
+        if gds_ratio is not None:
+            self.gds_ratio = float(gds_ratio)
+        if fss_ratio is not None:
+            self.fss_ratio = float(fss_ratio)
+        if rs_ratio is not None:
+            self.rs_ratio = float(rs_ratio)
+
     def _default_cache_dir(self):
         if not self.gps_file:
             return ""

@@ -15,6 +15,7 @@ from optimizers.make_optimizer import make_optimizer
 from models.taskflow import make_model
 from datasets.make_dataloader import make_dataset
 from datasets.dss_fss import build_fss_neighbors, should_update_fss
+from datasets.dss_stage import DSSStageController
 from tool.utils import save_network, copyfiles2checkpoints, get_preds, get_logger, calc_flops_params, set_seed, save_training_checkpoint, load_training_checkpoint, save_run_artifacts
 import warnings
 from losses.loss import Loss
@@ -89,6 +90,16 @@ def get_parse():
                         help='planned interval for refreshing FSS neighbors')
     parser.add_argument('--dss_cache_dir', default="", type=str,
                         help='cache dir for dataset-level DSS files; defaults to <DenseUAV>/dss_cache')
+    parser.add_argument('--dss_stage_mode', default='fixed', type=str, choices=['fixed', 'loss_adaptive'],
+                        help='DSS stage schedule mode')
+    parser.add_argument('--dss_ce_threshold', default=2.0, type=float,
+                        help='CE EMA threshold for switching DSS early -> middle')
+    parser.add_argument('--dss_plateau_delta', default=0.05, type=float,
+                        help='relative total-loss EMA drop below this value counts as plateau')
+    parser.add_argument('--dss_plateau_patience', default=3, type=int,
+                        help='number of plateau epochs for switching DSS middle -> late')
+    parser.add_argument('--dss_ema_momentum', default=0.9, type=float,
+                        help='EMA momentum for DSS adaptive stage losses')
     parser.add_argument('--num_epochs', default=120, type=int, help='total epoches for training')
     parser.add_argument('--num_bottleneck', default=512, type=int, help='the dimensions for embedding the feature')
     parser.add_argument('--load_from', default="", type=str, help='checkpoints path for pre-loading')
@@ -148,6 +159,19 @@ def write_context_gate_file(opt, model, best_metric=None):
         f.write("best_metric={}\n".format(best_metric))
 
 
+def apply_dss_ratios(opt, sampler, ratios):
+    if not hasattr(sampler, "set_dss_ratios"):
+        return
+    sampler.set_dss_ratios(
+        gds_ratio=ratios["gds_ratio"],
+        fss_ratio=ratios["fss_ratio"],
+        rs_ratio=ratios["rs_ratio"],
+    )
+    opt.dss_gds_ratio = ratios["gds_ratio"]
+    opt.dss_fss_ratio = ratios["fss_ratio"]
+    opt.dss_rs_ratio = ratios["rs_ratio"]
+
+
 def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, start_epoch=0, best_metric=None):
     logger = get_logger(
         "checkpoints/{}/train.log".format(opt.name))
@@ -163,6 +187,11 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
     scaler = GradScaler(enabled=opt.autocast and use_gpu)
     nnloss = Loss(opt)
     total_batches_seen = 0
+    dss_stage_controller = None
+    if getattr(opt, "train_strategy", "origin") == "dss" and getattr(opt, "dss_stage_mode", "fixed") == "loss_adaptive":
+        dss_stage_controller = DSSStageController(opt)
+        apply_dss_ratios(opt, dataloaders.sampler, dss_stage_controller.current_ratios())
+        logger.info("DSS adaptive stage initialized: stage=early ratios={}".format(dss_stage_controller.current_ratios()))
     for epoch in range(start_epoch, num_epochs):
         logger.info('Epoch {}/{}'.format(epoch, num_epochs - 1))
         logger.info('-' * 50)
@@ -178,9 +207,14 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
         stop_training = False
         if hasattr(dataloaders.sampler, "set_epoch"):
             dataloaders.sampler.set_epoch(epoch)
-        if hasattr(dataloaders.sampler, "update_fss_neighbors") and should_update_fss(epoch, opt):
+        sampler_fss_ratio = getattr(dataloaders.sampler, "fss_ratio", getattr(opt, "dss_fss_ratio", 0.0))
+        has_fss_neighbors = getattr(dataloaders.sampler, "fss_neighbors", None) is not None
+        if hasattr(dataloaders.sampler, "update_fss_neighbors") and should_update_fss(
+            epoch, opt, fss_ratio=sampler_fss_ratio, has_neighbors=has_fss_neighbors
+        ):
             fss_neighbors = build_fss_neighbors(model, dataloaders.dataset, opt, logger=logger, epoch=epoch)
             dataloaders.sampler.update_fss_neighbors(fss_neighbors)
+            opt._last_fss_update_epoch = epoch
 
         model.train(True)  # Set model to training mode
         for data, data3 in dataloaders:
@@ -266,6 +300,35 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
                             epoch_acc2, lr_backbone, lr_other, epoch_batches, epoch_samples))
         if hasattr(dataloaders.sampler, "last_stats") and dataloaders.sampler.last_stats:
             logger.info("DSS sampler stats: {}".format(dataloaders.sampler.last_stats))
+        if dss_stage_controller is not None:
+            stage_info = dss_stage_controller.update(epoch, epoch_cls_loss, epoch_loss)
+            apply_dss_ratios(opt, dataloaders.sampler, stage_info)
+            if stage_info["changed"]:
+                logger.info(
+                    "DSS stage changed at epoch %d: %s -> %s ce_ema=%.4f total_loss_ema=%.4f loss_drop=%s ratios={'gds': %.3f, 'fss': %.3f, 'rs': %.3f}",
+                    epoch,
+                    stage_info["old_stage"],
+                    stage_info["stage"],
+                    stage_info["ce_ema"],
+                    stage_info["total_loss_ema"],
+                    "None" if stage_info["loss_drop"] is None else "{:.6f}".format(stage_info["loss_drop"]),
+                    stage_info["gds_ratio"],
+                    stage_info["fss_ratio"],
+                    stage_info["rs_ratio"],
+                )
+            else:
+                logger.info(
+                    "DSS stage state: epoch=%d stage=%s ce_ema=%.4f total_loss_ema=%.4f loss_drop=%s plateau_count=%d ratios={'gds': %.3f, 'fss': %.3f, 'rs': %.3f}",
+                    epoch,
+                    stage_info["stage"],
+                    stage_info["ce_ema"],
+                    stage_info["total_loss_ema"],
+                    "None" if stage_info["loss_drop"] is None else "{:.6f}".format(stage_info["loss_drop"]),
+                    stage_info["plateau_count"],
+                    stage_info["gds_ratio"],
+                    stage_info["fss_ratio"],
+                    stage_info["rs_ratio"],
+                )
         context_gate = get_context_gate_value(model)
         if context_gate is not None:
             logger.info("GeoToken context_gate: {:.4f}".format(context_gate))

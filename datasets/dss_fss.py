@@ -36,14 +36,20 @@ class FSSFeatureDataset(Dataset):
         return sat_img, drone_img, idx
 
 
-def should_update_fss(epoch, opt):
+def should_update_fss(epoch, opt, fss_ratio=None, has_neighbors=True):
     if getattr(opt, "train_strategy", "origin") != "dss":
         return False
-    if getattr(opt, "dss_fss_ratio", 0.0) <= 0:
+    ratio = getattr(opt, "dss_fss_ratio", 0.0) if fss_ratio is None else fss_ratio
+    if ratio <= 0:
         return False
     interval = int(getattr(opt, "dss_fss_update_interval", 10))
     if interval <= 0:
         return False
+    if getattr(opt, "dss_stage_mode", "fixed") == "loss_adaptive":
+        last_update_epoch = getattr(opt, "_last_fss_update_epoch", None)
+        if not has_neighbors or last_update_epoch is None:
+            return True
+        return epoch - last_update_epoch >= interval
     start_epoch = int(getattr(opt, "dss_fss_start_epoch", getattr(opt, "dss_start_epoch", 0)))
     if epoch < start_epoch:
         return False

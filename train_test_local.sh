@@ -1,6 +1,6 @@
 set -e
 
-name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+HardMiningTripletLoss+klloss--GC5R_D192-fss45"
+name="VMamba-Tiny_GeoTokenHeadV1-CELOSS+HardMiningTripletLoss+klloss--GC5-bts32-samplenum4"
 root_dir="/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV"
 data_dir=$root_dir/train
 test_dir=$root_dir/test
@@ -9,9 +9,9 @@ num_worker=8
 lr=0.005
 backbone_lr=${BACKBONE_LR:-0.005}
 head_lr=${HEAD_LR:-0.01}
-batchsize=16
-sample_num=2
-train_strategy=${TRAIN_STRATEGY:-dss}  # origin dss
+batchsize=32
+sample_num=4
+train_strategy=${TRAIN_STRATEGY:-origin}  # origin dss
 dss_start_epoch=${DSS_START_EPOCH:-5}
 dss_gds_topk=${DSS_GDS_TOPK:-32}
 dss_gds_ratio=${DSS_GDS_RATIO:-0.4}
@@ -19,7 +19,7 @@ dss_fss_ratio=${DSS_FSS_RATIO:-0.2}
 dss_rs_ratio=${DSS_RS_RATIO:-0.4}
 dss_fss_topk=${DSS_FSS_TOPK:-32}
 
-dss_stage_mode=${DSS_STAGE_MODE:-loss_adaptive}#fixed loss_adaptive
+dss_stage_mode=${DSS_STAGE_MODE:-loss_adaptive} #fixed loss_adaptive
 dss_fss_start_epoch=${DSS_FSS_START_EPOCH:-45}
 dss_fss_update_interval=${DSS_FSS_UPDATE_INTERVAL:-10}
 dss_fss_samples_per_id=${DSS_FSS_SAMPLES_PER_ID:-1}
@@ -35,6 +35,10 @@ dss_ema_momentum=${DSS_EMA_MOMENTUM:-0.9}
 block=1
 num_bottleneck=512
 backbone="VMamba-Tiny" # VMamba-Tiny VMamba-Small VMamba-Base
+#resnet50 RKNet senet 
+#ViTS-224 ViTS-384 DeitS-224 DeitB-224 Pvtv2b2 ViTB-224 SwinB-224 Swinv2S-256 Swinv2T-256 Convnext-T
+#EfficientNet-B2 EfficientNet-B3 EfficientNet-B5 EfficientNet-B6
+#vgg16 cvt13
 backbone_weight="pretrained/backbones/vmamba/tiny/vssm1_tiny_0230s_ckpt_epoch_264.pth" #默认为空，如果填写了按照填写的读取
 head="GeoTokenHeadV1"
 head_pool="avg" # global avg max avg+max
@@ -52,12 +56,12 @@ num_epochs=120
 
 # 短训参数
 short_train=${SHORT_TRAIN:-false}
-short_train_epochs=${SHORT_EPOCHS:-60}
+short_train_epochs=${SHORT_EPOCHS:-90}
 
 
 
 #训练token mode
-token_mode=${TOKEN_MODE:-GC5R_D192}
+token_mode=${TOKEN_MODE:-GC5}
 case "$token_mode" in
     C)
         backbone="VMamba-Tiny-_GeoTokenHeadV1_C"

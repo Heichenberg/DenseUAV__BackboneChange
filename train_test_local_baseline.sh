@@ -1,22 +1,22 @@
-name="SwinB-224 -bts32-samplenum4"
+name="resnet50"
 root_dir="/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV"
 data_dir=$root_dir/train
 test_dir=$root_dir/test
 gpu_ids=0
 num_worker=8
 lr=0.01
-batchsize=32
-sample_num=4
+batchsize=16
+sample_num=1
 block=1
 num_bottleneck=512
-backbone="SwinB-224" # SingleBranchCNN ：resnet50  senet   # timm =1.0.27 Convnext-T  Pvtv2b2
+backbone="resnet50" # SingleBranchCNN ：resnet50  senet   # timm =1.0.27 Convnext-T  Pvtv2b2
 # SingleBranch ： ViTS-224  SwinB-224 
 # SingleBranchSwin ： 
 # EfficientNet-B2 EfficientNet-B3 EfficientNet-B5 EfficientNet-B6 vgg16 cvt13
-head="SingleBranch" # SingleBranch / SingleBranchCNN / SingleBranchSwin
+head="SingleBranchCNN" # SingleBranch / SingleBranchCNN / SingleBranchSwin
 head_pool="global" # global avg max avg+max
 cls_loss="CELoss" # CELoss FocalLoss
-feature_loss="HardMiningTripletLoss" # TripletLoss HardMiningTripletLoss WeightedSoftTripletLoss ContrastiveLoss
+feature_loss="WeightedSoftTripletLoss" # TripletLoss HardMiningTripletLoss WeightedSoftTripletLoss ContrastiveLoss
 kl_loss="KLLoss" # KLLoss
 h=224
 w=224

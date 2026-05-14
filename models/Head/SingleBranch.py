@@ -61,7 +61,27 @@ class SingleBranchSwin(nn.Module):
             opt.in_planes, opt.nclasses, opt.droprate, num_bottleneck=opt.num_bottleneck)
 
     def forward(self, features):
-        global_feature = self.pool(features.transpose(
-            2, 1)).reshape(features.shape[0], -1)
+        if features.ndim == 2:
+            global_feature = features
+        elif features.ndim == 3:
+            global_feature = self.pool(features.transpose(2, 1)).reshape(features.shape[0], -1)
+        elif features.ndim == 4:
+            if features.shape[1] == self.opt.in_planes:
+                features = features.flatten(2).transpose(2, 1)
+            elif features.shape[-1] == self.opt.in_planes:
+                features = features.reshape(features.shape[0], -1, features.shape[-1])
+            else:
+                raise ValueError(
+                    "SingleBranchSwin expected 4D features with channel dimension {}, got {}".format(
+                        self.opt.in_planes, tuple(features.shape)
+                    )
+                )
+            global_feature = self.pool(features.transpose(2, 1)).reshape(features.shape[0], -1)
+        else:
+            raise ValueError(
+                "SingleBranchSwin expected 2D, 3D, or 4D features, got {}".format(
+                    tuple(features.shape)
+                )
+            )
         cls, feature = self.classifier(global_feature)
         return [cls, feature]

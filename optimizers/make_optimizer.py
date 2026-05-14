@@ -3,6 +3,14 @@ from torch.optim import lr_scheduler
 
 
 def make_optimizer(model,opt):
+    backbone_lr = opt.backbone_lr
+    head_lr = opt.head_lr
+    if getattr(opt, "backbone", "") != "VMamba-Tiny":
+        backbone_lr = opt.lr
+        head_lr = opt.lr
+        opt.backbone_lr = opt.lr
+        opt.head_lr = opt.lr
+
     backbone_params = []
     head_params = []
     seen_params = set()
@@ -23,14 +31,14 @@ def make_optimizer(model,opt):
     if len(head_params) == 0:
         raise ValueError("No trainable head/other parameters found for optimizer group 1")
 
-    print("backbone lr = {}".format(opt.backbone_lr))
-    print("head lr = {}".format(opt.head_lr))
+    print("backbone lr = {}".format(backbone_lr))
+    print("head lr = {}".format(head_lr))
     print("num backbone params = {}".format(sum(p.numel() for p in backbone_params)))
     print("num head params = {}".format(sum(p.numel() for p in head_params)))
 
     optimizer_ft = optim.SGD([
-        {'params': backbone_params, 'lr': opt.backbone_lr},
-        {'params': head_params, 'lr': opt.head_lr}
+        {'params': backbone_params, 'lr': backbone_lr},
+        {'params': head_params, 'lr': head_lr}
     ], weight_decay=5e-4, momentum=0.9, nesterov=True)
 
 

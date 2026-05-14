@@ -47,7 +47,7 @@ class Backbone(nn.Module):
             output_channel = 768
         elif backbone=="SwinB-224":
             backbone_model = timm.create_model("swin_base_patch4_window7_224", pretrained=True)
-            output_channel = 768
+            output_channel = 1024
         elif backbone=="Swinv2S-256":
             backbone_model = timm.create_model("swinv2_small_window8_256", pretrained=True)
             output_channel = 768
@@ -82,19 +82,19 @@ class Backbone(nn.Module):
             backbone_model = VMambaTinyBackbone(pretrained=getattr(self.opt, "backbone_weight", ""))
             output_channel = backbone_model.output_channel
         elif backbone=="VMamba-Tiny-Vector":
-            backbone_model = VMambaTinyBackbone(pretrained=getattr(self.opt, "backbone_weight", ""), output_mode="vector")
+            backbone_model = VMambaTinyBackbone(pretrained="", output_mode="vector")
             output_channel = backbone_model.output_channel
         elif backbone=="VMamba-Small":
-            backbone_model = VMambaSmallBackbone(pretrained=getattr(self.opt, "backbone_weight", ""))
+            backbone_model = VMambaSmallBackbone(pretrained="")
             output_channel = backbone_model.output_channel
         elif backbone=="VMamba-Small-Vector":
-            backbone_model = VMambaSmallBackbone(pretrained=getattr(self.opt, "backbone_weight", ""), output_mode="vector")
+            backbone_model = VMambaSmallBackbone(pretrained="", output_mode="vector")
             output_channel = backbone_model.output_channel
         elif backbone=="VMamba-Base":
-            backbone_model = VMambaBaseBackbone(pretrained=getattr(self.opt, "backbone_weight", ""))
+            backbone_model = VMambaBaseBackbone(pretrained="")
             output_channel = backbone_model.output_channel
         elif backbone=="VMamba-Base-Vector":
-            backbone_model = VMambaBaseBackbone(pretrained=getattr(self.opt, "backbone_weight", ""), output_mode="vector")
+            backbone_model = VMambaBaseBackbone(pretrained="", output_mode="vector")
             output_channel = backbone_model.output_channel
         else:
             raise NameError("{} not in the backbone list!!!".format(backbone))

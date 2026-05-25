@@ -27,6 +27,9 @@ def normalize_model_alias(opt):
     if alias in alias_map:
         real_backbone, real_head, active_tokens, center_size, context_size, context_dim, context_gate, context_gate_init = alias_map[alias]
         opt.backbone = real_backbone
+        requested_head = getattr(opt, "head", real_head)
+        if requested_head != real_head:
+            return opt
         opt.head = real_head
         opt.geo_active_tokens = active_tokens
         opt.geo_center_size = center_size

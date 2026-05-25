@@ -7,6 +7,7 @@ from .NetVLAD import NetVLAD
 from .MixerHead import MixerHeadV1
 from .GeoTokenHead import GeoTokenHeadV1
 from .GeoTokenV2Head import GeoTokenV2Head
+from .GeoTokenV2MixerHead import GeoTokenV2Mixer1Head, GeoTokenV2Mixer2Head
 
 def make_head(opt):
     return Head(opt)
@@ -44,6 +45,10 @@ class Head(nn.Module):
             head_model = GeoTokenHeadV1(opt)
         elif head == "GeoTokenV2Head":
             head_model = GeoTokenV2Head(opt)
+        elif head == "GeoTokenV2Mixer1Head":
+            head_model = GeoTokenV2Mixer1Head(opt)
+        elif head == "GeoTokenV2Mixer2Head":
+            head_model = GeoTokenV2Mixer2Head(opt)
         else:
             raise NameError("{} not in the head list!!!".format(head))
         return head_model

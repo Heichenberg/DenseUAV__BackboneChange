@@ -14,6 +14,13 @@ from .GeoTokenV2CAGMixerHead import (
     GeoTokenV2CAGMixer8Head,
 )
 from .GeoTokenV2MixerHead import GeoTokenV2Mixer1Head, GeoTokenV2Mixer2Head
+from .MSGE_GeoTokenV2 import MSGE_GeoTokenV2
+from .MSGE_GeoTokenV2CAGHead import MSGE_GeoTokenV2CAGHead
+from .MSGE_GeoTokenV2CAGMixerHead import (
+    MSGE_GeoTokenV2CAGMixer1Head,
+    MSGE_GeoTokenV2CAGMixer2Head,
+    MSGE_GeoTokenV2CAGMixer4Head,
+)
 
 def make_head(opt):
     return Head(opt)
@@ -63,6 +70,16 @@ class Head(nn.Module):
             head_model = GeoTokenV2Mixer1Head(opt)
         elif head == "GeoTokenV2Mixer2Head":
             head_model = GeoTokenV2Mixer2Head(opt)
+        elif head == "MSGE_GeoTokenV2":
+            head_model = MSGE_GeoTokenV2(opt)
+        elif head == "MSGE_GeoTokenV2CAGHead":
+            head_model = MSGE_GeoTokenV2CAGHead(opt)
+        elif head == "MSGE_GeoTokenV2CAGMixer1Head":
+            head_model = MSGE_GeoTokenV2CAGMixer1Head(opt)
+        elif head == "MSGE_GeoTokenV2CAGMixer2Head":
+            head_model = MSGE_GeoTokenV2CAGMixer2Head(opt)
+        elif head == "MSGE_GeoTokenV2CAGMixer4Head":
+            head_model = MSGE_GeoTokenV2CAGMixer4Head(opt)
         else:
             raise NameError("{} not in the head list!!!".format(head))
         return head_model

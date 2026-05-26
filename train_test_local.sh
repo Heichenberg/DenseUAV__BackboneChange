@@ -1,6 +1,6 @@
 set -e
 
-name=${NAME:-"VMamba-Tiny+GeoTokenV2CAGHead-50-bts16-sp2"}
+name=${NAME:-"VMamba-Tiny+MSGE_GeoTokenV2CAGMixer1Head-50-bts16-sp2"}
 root_dir=${ROOT_DIR:-"/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV-DSS"}
 data_dir=$root_dir/train
 test_dir=$root_dir/test
@@ -18,7 +18,7 @@ backbone=${BACKBONE:-"VMamba-Tiny"} # VMamba-Tiny VMamba-Small VMamba-Base
 #EfficientNet-B2 EfficientNet-B3 EfficientNet-B5 EfficientNet-B6
 #vgg16 cvt13
 backbone_weight=${BACKBONE_WEIGHT:-"pretrained/backbones/vmamba/tiny/vssm1_tiny_0230s_ckpt_epoch_264.pth"} #默认为空，如果填写了按照填写的读取
-head=${HEAD:-"GeoTokenV2CAGHead"} # SingleBranch / SingleBranchCNN / SingleBranchSwin / GeoTokenHeadV1/GeoTokenV2Head /FSRA_CNN /LPN_CNN 
+head=${HEAD:-"MSGE_GeoTokenV2CAGMixer1Head"} # SingleBranch / SingleBranchCNN / SingleBranchSwin / GeoTokenHeadV1/GeoTokenV2Head /FSRA_CNN /LPN_CNN 
 head_pool=${HEAD_POOL:-"global"} # global avg max avg+max
 cls_loss=${CLS_LOSS:-"CELoss"} # CELoss FocalLoss
 feature_loss=${FEATURE_LOSS:-"WeightedSoftTripletLoss"} # TripletLoss HardMiningTripletLoss WeightedSoftTripletLoss ContrastiveLoss

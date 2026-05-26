@@ -7,6 +7,12 @@ from .NetVLAD import NetVLAD
 from .MixerHead import MixerHeadV1
 from .GeoTokenHead import GeoTokenHeadV1
 from .GeoTokenV2Head import GeoTokenV2Head
+from .GeoTokenV2CAGHead import GeoTokenV2CAGHead
+from .GeoTokenV2CAGMixerHead import (
+    GeoTokenV2CAGMixer2Head,
+    GeoTokenV2CAGMixer4Head,
+    GeoTokenV2CAGMixer8Head,
+)
 from .GeoTokenV2MixerHead import GeoTokenV2Mixer1Head, GeoTokenV2Mixer2Head
 
 def make_head(opt):
@@ -45,6 +51,14 @@ class Head(nn.Module):
             head_model = GeoTokenHeadV1(opt)
         elif head == "GeoTokenV2Head":
             head_model = GeoTokenV2Head(opt)
+        elif head == "GeoTokenV2CAGHead":
+            head_model = GeoTokenV2CAGHead(opt)
+        elif head == "GeoTokenV2CAGMixer2Head":
+            head_model = GeoTokenV2CAGMixer2Head(opt)
+        elif head == "GeoTokenV2CAGMixer4Head":
+            head_model = GeoTokenV2CAGMixer4Head(opt)
+        elif head == "GeoTokenV2CAGMixer8Head":
+            head_model = GeoTokenV2CAGMixer8Head(opt)
         elif head == "GeoTokenV2Mixer1Head":
             head_model = GeoTokenV2Mixer1Head(opt)
         elif head == "GeoTokenV2Mixer2Head":

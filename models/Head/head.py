@@ -16,6 +16,7 @@ from .GeoTokenV2CAGMixerHead import (
 from .GeoTokenV2MixerHead import GeoTokenV2Mixer1Head, GeoTokenV2Mixer2Head
 from .MSGE_GeoTokenV2 import MSGE_GeoTokenV2
 from .MSGE_GeoTokenV2CAGHead import MSGE_GeoTokenV2CAGHead
+from .MSGE_GeoTokenV2CAGDivHead import MSGE_GeoTokenV2CAGDivHead
 from .MSGE_GeoTokenV2CAGMixerHead import (
     MSGE_GeoTokenV2CAGMixer1Head,
     MSGE_GeoTokenV2CAGMixer2Head,
@@ -74,6 +75,8 @@ class Head(nn.Module):
             head_model = MSGE_GeoTokenV2(opt)
         elif head == "MSGE_GeoTokenV2CAGHead":
             head_model = MSGE_GeoTokenV2CAGHead(opt)
+        elif head == "MSGE_GeoTokenV2CAGDivHead":
+            head_model = MSGE_GeoTokenV2CAGDivHead(opt)
         elif head == "MSGE_GeoTokenV2CAGMixer1Head":
             head_model = MSGE_GeoTokenV2CAGMixer1Head(opt)
         elif head == "MSGE_GeoTokenV2CAGMixer2Head":

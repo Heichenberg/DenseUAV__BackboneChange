@@ -6,6 +6,16 @@ import torch
 from .queryDataset import RotateAndCrop, RandomCrop, RandomErasing
 
 
+def _default_dss_paths():
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    compare_trial_root = os.path.dirname(os.path.dirname(project_root))
+    dataset_root = os.path.join(compare_trial_root, "Dataset", "DenseUAV-DSS")
+    return (
+        os.path.join(dataset_root, "Dense_GPS_train.txt"),
+        os.path.join(dataset_root, "dss_cache"),
+    )
+
+
 def make_dataset(opt):
     transform_train_list = []
     transform_satellite_list = []
@@ -83,20 +93,22 @@ def make_dataset(opt):
         id_subset_file=getattr(opt, "id_subset_file", ""),
     )
     if getattr(opt, "train_strategy", "origin") == "dss":
-        gps_file = getattr(opt, "dss_gps_file", "")
-        if not gps_file:
-            gps_file = os.path.join(os.path.dirname(opt.data_dir), "Dense_GPS_train.txt")
+        gps_file, cache_dir = _default_dss_paths()
+        dss_mode = getattr(opt, "dss_mode", "none")
         samper = DSSSampler_University(
             image_datasets,
             batchsize=opt.batchsize,
             sample_num=opt.sample_num,
             gps_file=gps_file,
             gds_topk=getattr(opt, "dss_gds_topk", 64),
-            dss_start_epoch=getattr(opt, "dss_start_epoch", 0),
-            gds_ratio=getattr(opt, "dss_gds_ratio", 0.5),
-            fss_ratio=getattr(opt, "dss_fss_ratio", 0.0),
-            rs_ratio=getattr(opt, "dss_rs_ratio", 0.5),
-            cache_dir=getattr(opt, "dss_cache_dir", ""),
+            dss_start_epoch=0,
+            gds_ratio=0.5,
+            fss_ratio=0.0,
+            rs_ratio=0.5,
+            cache_dir=cache_dir,
+            tact_gps=dss_mode == "gps",
+            tact_smooth=dss_mode == "smooth",
+            total_epoch=getattr(opt, "num_epochs", 1),
         )
     else:
         samper = Sampler_University(

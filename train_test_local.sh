@@ -1,6 +1,6 @@
 set -e
 
-name=${NAME:-"VMamba-Tiny+MSGE_GeoTokenV2CAGMixer1Head-50-bts16-sp2"}
+name=${NAME:-"VMamba-Tiny+MSGE_GeoTokenV2CAGDivHead-DIVERSITY_LOSS0.005-50-bts16-sp2"}
 root_dir=${ROOT_DIR:-"/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV-DSS"}
 data_dir=$root_dir/train
 test_dir=$root_dir/test
@@ -18,36 +18,24 @@ backbone=${BACKBONE:-"VMamba-Tiny"} # VMamba-Tiny VMamba-Small VMamba-Base
 #EfficientNet-B2 EfficientNet-B3 EfficientNet-B5 EfficientNet-B6
 #vgg16 cvt13
 backbone_weight=${BACKBONE_WEIGHT:-"pretrained/backbones/vmamba/tiny/vssm1_tiny_0230s_ckpt_epoch_264.pth"} #默认为空，如果填写了按照填写的读取
-head=${HEAD:-"MSGE_GeoTokenV2CAGMixer1Head"} # SingleBranch / SingleBranchCNN / SingleBranchSwin / GeoTokenHeadV1/GeoTokenV2Head /FSRA_CNN /LPN_CNN 
+head=${HEAD:-"MSGE_GeoTokenV2CAGDivHead"} # SingleBranch / SingleBranchCNN / SingleBranchSwin / GeoTokenHeadV1/GeoTokenV2Head /FSRA_CNN /LPN_CNN 
 head_pool=${HEAD_POOL:-"global"} # global avg max avg+max
 cls_loss=${CLS_LOSS:-"CELoss"} # CELoss FocalLoss
 feature_loss=${FEATURE_LOSS:-"WeightedSoftTripletLoss"} # TripletLoss HardMiningTripletLoss WeightedSoftTripletLoss ContrastiveLoss
 kl_loss=${KL_LOSS:-"KLLoss"} # KLLoss
+diversity_loss_weight=${DIVERSITY_LOSS_WEIGHT:-0.005}
 h=224
 w=224
 
 
 train_strategy=${TRAIN_STRATEGY:-origin}  # origin dss
-dss_start_epoch=${DSS_START_EPOCH:-5}
+dss_mode=${DSS_MODE:-none}  # none gps smooth
 dss_gds_topk=${DSS_GDS_TOPK:-32}
-dss_gds_ratio=${DSS_GDS_RATIO:-0.4}
-dss_fss_ratio=${DSS_FSS_RATIO:-0.2}
-dss_rs_ratio=${DSS_RS_RATIO:-0.4}
 dss_fss_topk=${DSS_FSS_TOPK:-32}
-
-dss_stage_mode=${DSS_STAGE_MODE:-loss_adaptive} #fixed loss_adaptive
-dss_fss_start_epoch=${DSS_FSS_START_EPOCH:-45}
+dss_fss_start_epoch=${DSS_FSS_START_EPOCH:-10}
 dss_fss_update_interval=${DSS_FSS_UPDATE_INTERVAL:-10}
 dss_fss_samples_per_id=${DSS_FSS_SAMPLES_PER_ID:-1}
 
-
-dss_gps_file=${DSS_GPS_FILE:-"$root_dir/Dense_GPS_train.txt"}
-dss_cache_dir=${DSS_CACHE_DIR:-"$root_dir/dss_cache"}
-
-dss_ce_threshold=${DSS_CE_THRESHOLD:-2.0}
-dss_plateau_delta=${DSS_PLATEAU_DELTA:-0.05}
-dss_plateau_patience=${DSS_PLATEAU_PATIENCE:-3}
-dss_ema_momentum=${DSS_EMA_MOMENTUM:-0.9}
 block=1
 num_bottleneck=512
 
@@ -61,6 +49,11 @@ num_epochs=${NUM_EPOCHS:-50}
 # 短训参数
 short_train=${SHORT_TRAIN:-false}
 short_train_epochs=${SHORT_EPOCHS:-5}
+
+# L_Diversity experiments:
+# HEAD=MSGE_GeoTokenV2CAGDivHead DIVERSITY_LOSS_WEIGHT=0.005 ./train_test_local.sh
+# HEAD=MSGE_GeoTokenV2CAGDivHead DIVERSITY_LOSS_WEIGHT=0.01 ./train_test_local.sh
+# HEAD=MSGE_GeoTokenV2CAGDivHead DIVERSITY_LOSS_WEIGHT=0.02 ./train_test_local.sh
 
 
 
@@ -138,7 +131,7 @@ if [ "$short_train" = "true" ] || [ "$short_train" = "1" ]; then
     num_epochs=$short_train_epochs
 fi
 
-[ -n "$name" ] || name="${backbone}-${num_epochs}-${head}"
+[ -n "$name" ] || name="${backbone}+${head}-${num_epochs}-bts${batchsize}-sp${sample_num}"
 if [ -n "$token_mode" ] && [ "$token_mode" != "GCRS" ] && [[ "$name" != *"$token_mode"* ]]; then
     name="${name}_${token_mode}"
 fi
@@ -146,7 +139,7 @@ if [ "$short_train" = "true" ] || [ "$short_train" = "1" ]; then
     name="${name}_short${short_train_epochs}"
 fi
 if [ "$train_strategy" = "dss" ]; then
-    name="${name}_dssv1"
+    name="${name}_dss-${dss_mode}"
 fi
 if [ "$backbone_lr" != "0" ] || [ "$head_lr" != "0" ]; then
     name="${name}_blr${backbone_lr}_hlr${head_lr}"
@@ -158,11 +151,10 @@ if [ -n "$backbone_weight" ]; then
 fi
 
 train_cmd="python train.py --name $name --data_dir $data_dir --gpu_ids $gpu_ids --sample_num $sample_num \
-                --train_strategy $train_strategy --dss_gps_file $dss_gps_file --dss_start_epoch $dss_start_epoch --dss_gds_topk $dss_gds_topk --dss_gds_ratio $dss_gds_ratio --dss_fss_ratio $dss_fss_ratio --dss_fss_topk $dss_fss_topk --dss_fss_start_epoch $dss_fss_start_epoch --dss_fss_samples_per_id $dss_fss_samples_per_id --dss_rs_ratio $dss_rs_ratio --dss_fss_update_interval $dss_fss_update_interval --dss_cache_dir $dss_cache_dir \
-                --dss_stage_mode $dss_stage_mode --dss_ce_threshold $dss_ce_threshold --dss_plateau_delta $dss_plateau_delta --dss_plateau_patience $dss_plateau_patience --dss_ema_momentum $dss_ema_momentum \
+                --train_strategy $train_strategy --dss_mode $dss_mode --dss_gds_topk $dss_gds_topk --dss_fss_topk $dss_fss_topk --dss_fss_start_epoch $dss_fss_start_epoch --dss_fss_samples_per_id $dss_fss_samples_per_id --dss_fss_update_interval $dss_fss_update_interval \
                 --block $block --lr $lr --backbone_lr $backbone_lr --head_lr $head_lr --num_worker $num_worker --head $head --head_pool $head_pool \
                 --num_bottleneck $num_bottleneck --backbone $backbone $backbone_weight_arg --h $h --w $w --batchsize $batchsize --load_from $load_from \
-                --ra $ra --re $re --cj $cj --rr $rr --cls_loss $cls_loss --feature_loss $feature_loss --kl_loss $kl_loss \
+                --ra $ra --re $re --cj $cj --rr $rr --cls_loss $cls_loss --feature_loss $feature_loss --kl_loss $kl_loss --diversity_loss_weight $diversity_loss_weight \
                 --num_epochs $num_epochs"
 
 if [ "${DRY_RUN:-0}" = "1" ]; then

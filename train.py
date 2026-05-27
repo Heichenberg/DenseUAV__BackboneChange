@@ -15,7 +15,6 @@ from optimizers.make_optimizer import make_optimizer
 from models.taskflow import make_model
 from datasets.make_dataloader import make_dataset
 from datasets.dss_fss import build_fss_neighbors, should_update_fss
-from datasets.dss_stage import DSSStageController
 from tool.utils import save_network, copyfiles2checkpoints, get_preds, get_logger, calc_flops_params, set_seed, save_training_checkpoint, load_training_checkpoint, save_run_artifacts
 import warnings
 from losses.loss import Loss
@@ -64,42 +63,24 @@ def get_parse():
     parser.add_argument('--cls_loss', default="CELoss", type=str, help='loss type of representation learning')
     parser.add_argument('--feature_loss', default="no", type=str, help='loss type of metric learning')
     parser.add_argument('--kl_loss', default="no", type=str, help='loss type of mutual learning')
+    parser.add_argument('--diversity_loss_weight', default=0.0, type=float,
+                        help='weight for attention diversity regularization; 0 disables it')
     parser.add_argument('--sample_num', default=1, type=int,
                         help='num of repeat sampling')
     parser.add_argument('--train_strategy', default='origin', type=str, choices=['origin', 'dss'],
                         help='training sampler strategy')
-    parser.add_argument('--dss_gps_file', default="", type=str,
-                        help='GPS file used by DSS GDS sampling; defaults to <data_root>/Dense_GPS_train.txt')
-    parser.add_argument('--dss_start_epoch', default=0, type=int,
-                        help='epoch to start DSS sampling')
+    parser.add_argument('--dss_mode', default='none', type=str, choices=['none', 'gps', 'smooth'],
+                        help='DSS sampling schedule: none=fixed DSS, gps=TACT-GPS, smooth=TACT-Smooth')
     parser.add_argument('--dss_gds_topk', default=64, type=int,
                         help='number of nearest geographic negative IDs stored per anchor')
-    parser.add_argument('--dss_gds_ratio', default=0.5, type=float,
-                        help='DSS v1 ratio for GDS negatives inside the non-anchor part of a batch')
-    parser.add_argument('--dss_fss_ratio', default=0.0, type=float,
-                        help='DSS ratio for FSS negatives; ignored until fss_neighbors is populated')
     parser.add_argument('--dss_fss_topk', default=64, type=int,
                         help='number of nearest feature negative IDs stored per anchor')
     parser.add_argument('--dss_fss_start_epoch', default=10, type=int,
                         help='0-based epoch to start refreshing DSS FSS neighbors')
     parser.add_argument('--dss_fss_samples_per_id', default=1, type=int,
                         help='number of random satellite-drone pairs sampled per ID when building FSS')
-    parser.add_argument('--dss_rs_ratio', default=0.5, type=float,
-                        help='DSS v1 ratio for random IDs inside the non-anchor part of a batch')
     parser.add_argument('--dss_fss_update_interval', default=10, type=int,
                         help='planned interval for refreshing FSS neighbors')
-    parser.add_argument('--dss_cache_dir', default="", type=str,
-                        help='cache dir for dataset-level DSS files; defaults to <DenseUAV>/dss_cache')
-    parser.add_argument('--dss_stage_mode', default='fixed', type=str, choices=['fixed', 'loss_adaptive'],
-                        help='DSS stage schedule mode')
-    parser.add_argument('--dss_ce_threshold', default=2.0, type=float,
-                        help='CE EMA threshold for switching DSS early -> middle')
-    parser.add_argument('--dss_plateau_delta', default=0.05, type=float,
-                        help='relative total-loss EMA drop below this value counts as plateau')
-    parser.add_argument('--dss_plateau_patience', default=3, type=int,
-                        help='number of plateau epochs for switching DSS middle -> late')
-    parser.add_argument('--dss_ema_momentum', default=0.9, type=float,
-                        help='EMA momentum for DSS adaptive stage losses')
     parser.add_argument('--num_epochs', default=120, type=int, help='total epoches for training')
     parser.add_argument('--num_bottleneck', default=512, type=int, help='the dimensions for embedding the feature')
     parser.add_argument('--load_from', default="", type=str, help='checkpoints path for pre-loading')
@@ -159,19 +140,6 @@ def write_context_gate_file(opt, model, best_metric=None):
         f.write("best_metric={}\n".format(best_metric))
 
 
-def apply_dss_ratios(opt, sampler, ratios):
-    if not hasattr(sampler, "set_dss_ratios"):
-        return
-    sampler.set_dss_ratios(
-        gds_ratio=ratios["gds_ratio"],
-        fss_ratio=ratios["fss_ratio"],
-        rs_ratio=ratios["rs_ratio"],
-    )
-    opt.dss_gds_ratio = ratios["gds_ratio"]
-    opt.dss_fss_ratio = ratios["fss_ratio"]
-    opt.dss_rs_ratio = ratios["rs_ratio"]
-
-
 def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, start_epoch=0, best_metric=None):
     logger = get_logger(
         "checkpoints/{}/train.log".format(opt.name))
@@ -187,11 +155,11 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
     scaler = GradScaler(enabled=opt.autocast and use_gpu)
     nnloss = Loss(opt)
     total_batches_seen = 0
-    dss_stage_controller = None
-    if getattr(opt, "train_strategy", "origin") == "dss" and getattr(opt, "dss_stage_mode", "fixed") == "loss_adaptive":
-        dss_stage_controller = DSSStageController(opt)
-        apply_dss_ratios(opt, dataloaders.sampler, dss_stage_controller.current_ratios())
-        logger.info("DSS adaptive stage initialized: stage=early ratios={}".format(dss_stage_controller.current_ratios()))
+    dss_mode = getattr(opt, "dss_mode", "none")
+    if getattr(opt, "train_strategy", "origin") == "dss" and dss_mode == "gps":
+        logger.info("TACT-GPS enabled: overriding DSS stage ratios with epoch-based GDS/RS schedule.")
+    if getattr(opt, "train_strategy", "origin") == "dss" and dss_mode == "smooth":
+        logger.info("TACT-Smooth enabled: overriding DSS stage ratios with continuous GDS/FSS/RS schedule.")
     for epoch in range(start_epoch, num_epochs):
         logger.info('Epoch {}/{}'.format(epoch, num_epochs - 1))
         logger.info('-' * 50)
@@ -199,6 +167,7 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
         running_cls_loss = 0.0
         running_triplet = 0.0
         running_kl_loss = 0.0
+        running_div_loss = 0.0
         running_loss = 0.0
         running_corrects = 0.0
         running_corrects2 = 0.0
@@ -207,7 +176,9 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
         stop_training = False
         if hasattr(dataloaders.sampler, "set_epoch"):
             dataloaders.sampler.set_epoch(epoch)
-        sampler_fss_ratio = getattr(dataloaders.sampler, "fss_ratio", getattr(opt, "dss_fss_ratio", 0.0))
+        sampler_fss_ratio = getattr(dataloaders.sampler, "fss_ratio", 0.0)
+        if dss_mode == "smooth":
+            sampler_fss_ratio = 1.0
         has_fss_neighbors = getattr(dataloaders.sampler, "fss_neighbors", None) is not None
         if hasattr(dataloaders.sampler, "update_fss_neighbors") and should_update_fss(
             epoch, opt, fss_ratio=sampler_fss_ratio, has_neighbors=has_fss_neighbors
@@ -248,7 +219,7 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
                 outputs, outputs2 = model(inputs, inputs3)
             # print("model_time:{}".format(time.time()-start_time))
             # 计算损失
-            loss, cls_loss, f_triplet_loss, kl_loss = nnloss(
+            loss, cls_loss, f_triplet_loss, kl_loss, div_loss = nnloss(
                 outputs, outputs2, labels, labels3)
             if not torch.isfinite(loss):
                 raise ValueError("Non-finite loss detected: {}".format(loss.item()))
@@ -268,6 +239,7 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
             running_cls_loss += cls_loss.item()*now_batch_size
             running_triplet += f_triplet_loss.item() * now_batch_size
             running_kl_loss += kl_loss.item() * now_batch_size
+            running_div_loss += div_loss.item() * now_batch_size
             epoch_batches += 1
             epoch_samples += now_batch_size
             total_batches_seen += 1
@@ -288,47 +260,19 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
         epoch_cls_loss = running_cls_loss / denom
         epoch_kl_loss = running_kl_loss / denom
         epoch_triplet_loss = running_triplet / denom
+        epoch_div_loss = running_div_loss / denom
         epoch_loss = running_loss / denom
         epoch_acc = running_corrects / denom
         epoch_acc2 = running_corrects2 / denom
 
         lr_backbone = optimizer.state_dict()['param_groups'][0]['lr']
         lr_other = optimizer.state_dict()['param_groups'][1]['lr']
-        logger.info('Loss: {:.4f} Cls_Loss:{:.4f} KL_Loss:{:.4f} Triplet_Loss {:.4f} Satellite_Acc: {:.4f}  Drone_Acc: {:.4f} lr_backbone:{:.6f} lr_other {:.6f} actual_num_batches:{} actual_num_samples:{}'
+        logger.info('Loss: {:.4f} Cls_Loss:{:.4f} KL_Loss:{:.4f} Triplet_Loss {:.4f} Div_Loss:{:.4f} Satellite_Acc: {:.4f}  Drone_Acc: {:.4f} lr_backbone:{:.6f} lr_other {:.6f} actual_num_batches:{} actual_num_samples:{}'
                     .format(epoch_loss, epoch_cls_loss, epoch_kl_loss,
-                            epoch_triplet_loss, epoch_acc,
+                            epoch_triplet_loss, epoch_div_loss, epoch_acc,
                             epoch_acc2, lr_backbone, lr_other, epoch_batches, epoch_samples))
         if hasattr(dataloaders.sampler, "last_stats") and dataloaders.sampler.last_stats:
             logger.info("DSS sampler stats: {}".format(dataloaders.sampler.last_stats))
-        if dss_stage_controller is not None:
-            stage_info = dss_stage_controller.update(epoch, epoch_cls_loss, epoch_loss)
-            apply_dss_ratios(opt, dataloaders.sampler, stage_info)
-            if stage_info["changed"]:
-                logger.info(
-                    "DSS stage changed at epoch %d: %s -> %s ce_ema=%.4f total_loss_ema=%.4f loss_drop=%s ratios={'gds': %.3f, 'fss': %.3f, 'rs': %.3f}",
-                    epoch,
-                    stage_info["old_stage"],
-                    stage_info["stage"],
-                    stage_info["ce_ema"],
-                    stage_info["total_loss_ema"],
-                    "None" if stage_info["loss_drop"] is None else "{:.6f}".format(stage_info["loss_drop"]),
-                    stage_info["gds_ratio"],
-                    stage_info["fss_ratio"],
-                    stage_info["rs_ratio"],
-                )
-            else:
-                logger.info(
-                    "DSS stage state: epoch=%d stage=%s ce_ema=%.4f total_loss_ema=%.4f loss_drop=%s plateau_count=%d ratios={'gds': %.3f, 'fss': %.3f, 'rs': %.3f}",
-                    epoch,
-                    stage_info["stage"],
-                    stage_info["ce_ema"],
-                    stage_info["total_loss_ema"],
-                    "None" if stage_info["loss_drop"] is None else "{:.6f}".format(stage_info["loss_drop"]),
-                    stage_info["plateau_count"],
-                    stage_info["gds_ratio"],
-                    stage_info["fss_ratio"],
-                    stage_info["rs_ratio"],
-                )
         context_gate = get_context_gate_value(model)
         if context_gate is not None:
             logger.info("GeoToken context_gate: {:.4f}".format(context_gate))
@@ -339,6 +283,7 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
             "epoch_cls_loss": epoch_cls_loss,
             "epoch_kl_loss": epoch_kl_loss,
             "epoch_triplet_loss": epoch_triplet_loss,
+            "epoch_div_loss": epoch_div_loss,
             "epoch_acc": epoch_acc,
             "epoch_acc2": epoch_acc2,
             "lr_backbone": lr_backbone,

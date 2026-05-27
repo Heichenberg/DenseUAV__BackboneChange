@@ -153,6 +153,9 @@ class DSSSampler_University(object):
         rs_ratio=0.5,
         cache_dir="",
         fss_neighbors=None,
+        tact_gps=False,
+        tact_smooth=False,
+        total_epoch=1,
     ):
         self.data_len = len(data_source)
         self.batchsize = batchsize
@@ -160,28 +163,115 @@ class DSSSampler_University(object):
         self.gps_file = gps_file
         self.gds_topk = gds_topk
         self.dss_start_epoch = dss_start_epoch
-        self.gds_ratio = gds_ratio
-        self.fss_ratio = fss_ratio
-        self.rs_ratio = rs_ratio
+        self.base_gds_ratio = float(gds_ratio)
+        self.base_fss_ratio = float(fss_ratio)
+        self.base_rs_ratio = float(rs_ratio)
+        self.tact_gps = bool(tact_gps)
+        self.tact_smooth = bool(tact_smooth)
+        if self.tact_gps and self.tact_smooth:
+            raise ValueError("TACT-GPS and TACT-Smooth cannot be enabled at the same time")
+        self.total_epoch = int(total_epoch)
+        self.current_gds_ratio = 0.3 if (self.tact_gps or self.tact_smooth) else self.base_gds_ratio
+        self.current_fss_ratio = 0.0 if (self.tact_gps or self.tact_smooth) else self.base_fss_ratio
+        self.current_rs_ratio = 0.7 if (self.tact_gps or self.tact_smooth) else self.base_rs_ratio
+        self.gds_ratio = self.current_gds_ratio
+        self.fss_ratio = self.current_fss_ratio
+        self.rs_ratio = self.current_rs_ratio
         self.cache_dir = cache_dir or self._default_cache_dir()
         self.epoch = 0
+        self._last_tact_log_epoch = None
         self.fss_neighbors = self._validate_neighbors(fss_neighbors, "FSS") if fss_neighbors is not None else None
         self.gds_neighbors = self._build_gds_neighbors(data_source)
         self.last_stats = {}
 
     def set_epoch(self, epoch):
         self.epoch = epoch
+        if self.tact_gps or self.tact_smooth:
+            progress = self._tact_progress(epoch)
+            p_gps = 0.3 + 0.6 * progress
+        if self.tact_gps:
+            self.current_gds_ratio = p_gps
+            self.current_fss_ratio = 0.0
+            self.current_rs_ratio = 1.0 - p_gps
+            self.gds_ratio = self.current_gds_ratio
+            self.fss_ratio = self.current_fss_ratio
+            self.rs_ratio = self.current_rs_ratio
+            if self._last_tact_log_epoch != epoch:
+                print("[TACT-GPS] epoch={}/{}, gds_ratio={:.3f}, fss_ratio={:.3f}, rs_ratio={:.3f}".format(
+                    epoch,
+                    self.total_epoch,
+                    self.current_gds_ratio,
+                    self.current_fss_ratio,
+                    self.current_rs_ratio,
+                ))
+                self._last_tact_log_epoch = epoch
+        elif self.tact_smooth:
+            lambda_gps = (1.0 + math.cos(math.pi * progress)) / 2.0
+            target_gds_ratio = p_gps * lambda_gps
+            target_fss_ratio = p_gps * (1.0 - lambda_gps)
+            target_rs_ratio = 1.0 - p_gps
+            fss_available = self.fss_neighbors is not None
+            if fss_available:
+                effective_gds_ratio = target_gds_ratio
+                effective_fss_ratio = target_fss_ratio
+            else:
+                effective_gds_ratio = target_gds_ratio + target_fss_ratio
+                effective_fss_ratio = 0.0
+            effective_rs_ratio = target_rs_ratio
+
+            self.current_gds_ratio = effective_gds_ratio
+            self.current_fss_ratio = effective_fss_ratio
+            self.current_rs_ratio = effective_rs_ratio
+            self.gds_ratio = self.current_gds_ratio
+            self.fss_ratio = self.current_fss_ratio
+            self.rs_ratio = self.current_rs_ratio
+            if self._last_tact_log_epoch != epoch:
+                print(
+                    "[TACT-Smooth] epoch={}/{}, progress={:.3f}, p={:.3f}, lambda={:.3f}, "
+                    "target_gds={:.3f}, target_fss={:.3f}, target_rs={:.3f}, "
+                    "effective_gds={:.3f}, effective_fss={:.3f}, effective_rs={:.3f}, "
+                    "fss_available={}".format(
+                        epoch,
+                        self.total_epoch,
+                        progress,
+                        p_gps,
+                        lambda_gps,
+                        target_gds_ratio,
+                        target_fss_ratio,
+                        target_rs_ratio,
+                        self.current_gds_ratio,
+                        self.current_fss_ratio,
+                        self.current_rs_ratio,
+                        fss_available,
+                    )
+                )
+                self._last_tact_log_epoch = epoch
 
     def update_fss_neighbors(self, neighbors=None):
         self.fss_neighbors = self._validate_neighbors(neighbors, "FSS") if neighbors is not None else None
+        if self.tact_smooth:
+            self.set_epoch(self.epoch)
+
+    def _tact_progress(self, epoch):
+        if self.total_epoch <= 1:
+            return 0.0
+        progress = epoch / float(self.total_epoch - 1)
+        return max(0.0, min(1.0, progress))
 
     def set_dss_ratios(self, gds_ratio=None, fss_ratio=None, rs_ratio=None):
         if gds_ratio is not None:
-            self.gds_ratio = float(gds_ratio)
+            self.base_gds_ratio = float(gds_ratio)
         if fss_ratio is not None:
-            self.fss_ratio = float(fss_ratio)
+            self.base_fss_ratio = float(fss_ratio)
         if rs_ratio is not None:
-            self.rs_ratio = float(rs_ratio)
+            self.base_rs_ratio = float(rs_ratio)
+        if not self.tact_gps and not self.tact_smooth:
+            self.current_gds_ratio = self.base_gds_ratio
+            self.current_fss_ratio = self.base_fss_ratio
+            self.current_rs_ratio = self.base_rs_ratio
+            self.gds_ratio = self.current_gds_ratio
+            self.fss_ratio = self.current_fss_ratio
+            self.rs_ratio = self.current_rs_ratio
 
     def _default_cache_dir(self):
         if not self.gps_file:
@@ -330,10 +420,12 @@ class DSSSampler_University(object):
         batch = [anchor]
         used = {anchor}
         remaining = self.batchsize - 1
-        fss_available = self.fss_neighbors is not None and self.fss_ratio > 0
-        fss_ratio = self.fss_ratio if fss_available else 0.0
-        ratio_sum = max(self.gds_ratio + fss_ratio + self.rs_ratio, 1e-12)
-        gds_count = int(round(remaining * self.gds_ratio / ratio_sum))
+        gds_ratio = self.current_gds_ratio
+        rs_ratio = self.current_rs_ratio
+        fss_available = self.fss_neighbors is not None and self.current_fss_ratio > 0
+        fss_ratio = self.current_fss_ratio if fss_available else 0.0
+        ratio_sum = max(gds_ratio + fss_ratio + rs_ratio, 1e-12)
+        gds_count = int(round(remaining * gds_ratio / ratio_sum))
         fss_count = int(round(remaining * fss_ratio / ratio_sum))
 
         gds_samples = self._sample_candidates(self.gds_neighbors[anchor], gds_count, used)

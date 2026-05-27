@@ -6,14 +6,23 @@ import torch
 from .queryDataset import RotateAndCrop, RandomCrop, RandomErasing
 
 
-def _default_dss_paths():
+def _default_dss_paths(data_dir):
+    data_dir = os.path.abspath(data_dir)
+    dataset_root = os.path.dirname(data_dir) if os.path.basename(data_dir) == "train" else data_dir
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     compare_trial_root = os.path.dirname(os.path.dirname(project_root))
-    dataset_root = os.path.join(compare_trial_root, "Dataset", "DenseUAV-DSS")
-    return (
-        os.path.join(dataset_root, "Dense_GPS_train.txt"),
-        os.path.join(dataset_root, "dss_cache"),
-    )
+    candidates = [
+        dataset_root,
+        os.path.join(os.path.dirname(dataset_root), "DenseUAV-DSS"),
+        os.path.join(compare_trial_root, "Dataset", "DenseUAV-DSS"),
+        os.path.join(compare_trial_root, "Dataset", "DenseUAV"),
+    ]
+    for root in candidates:
+        gps_file = os.path.join(root, "Dense_GPS_train.txt")
+        if os.path.exists(gps_file):
+            return gps_file, os.path.join(root, "dss_cache")
+    root = candidates[0]
+    return os.path.join(root, "Dense_GPS_train.txt"), os.path.join(root, "dss_cache")
 
 
 def make_dataset(opt):
@@ -93,7 +102,7 @@ def make_dataset(opt):
         id_subset_file=getattr(opt, "id_subset_file", ""),
     )
     if getattr(opt, "train_strategy", "origin") == "dss":
-        gps_file, cache_dir = _default_dss_paths()
+        gps_file, cache_dir = _default_dss_paths(opt.data_dir)
         dss_mode = getattr(opt, "dss_mode", "none")
         samper = DSSSampler_University(
             image_datasets,

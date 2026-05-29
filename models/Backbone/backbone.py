@@ -1,7 +1,7 @@
 import torch.nn as nn
 import timm
 from .RKNet import RKNet
-from .vmamba_wrapper import VMambaBaseBackbone, VMambaSmallBackbone, VMambaTinyBackbone
+from .vmamba_wrapper import VMambaBaseBackbone, VMambaSmallBackbone, VMambaTinyBackbone, VMambaTinyMSGEBlockBackbone
 import torch
 
 def make_backbone(opt):
@@ -80,6 +80,9 @@ class Backbone(nn.Module):
             backbone_model = self.load_checkpoints(checkpoint_weight, backbone_model)
         elif backbone=="VMamba-Tiny":
             backbone_model = VMambaTinyBackbone(pretrained=getattr(self.opt, "backbone_weight", ""))
+            output_channel = backbone_model.output_channel
+        elif backbone=="VMamba-Tiny-MSGEBlock":
+            backbone_model = VMambaTinyMSGEBlockBackbone(pretrained=getattr(self.opt, "backbone_weight", ""))
             output_channel = backbone_model.output_channel
         elif backbone=="VMamba-Tiny-Vector":
             backbone_model = VMambaTinyBackbone(pretrained="", output_mode="vector")

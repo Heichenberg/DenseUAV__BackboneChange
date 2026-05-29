@@ -1,6 +1,6 @@
 set -e
 
-name=${NAME:-"VMamba-Tiny+MSGE_GeoTokenV2CAGDivHead-DIVERSITY_LOSS0.005-50-bts16-sp2"}
+name=${NAME:-""}
 root_dir=${ROOT_DIR:-"/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV-DSS"}
 data_dir=$root_dir/train
 test_dir=$root_dir/test
@@ -18,12 +18,12 @@ backbone=${BACKBONE:-"VMamba-Tiny"} # VMamba-Tiny VMamba-Small VMamba-Base
 #EfficientNet-B2 EfficientNet-B3 EfficientNet-B5 EfficientNet-B6
 #vgg16 cvt13
 backbone_weight=${BACKBONE_WEIGHT:-"pretrained/backbones/vmamba/tiny/vssm1_tiny_0230s_ckpt_epoch_264.pth"} #默认为空，如果填写了按照填写的读取
-head=${HEAD:-"MSGE_GeoTokenV2CAGDivHead"} # SingleBranch / SingleBranchCNN / SingleBranchSwin / GeoTokenHeadV1/GeoTokenV2Head /FSRA_CNN /LPN_CNN 
+head=${HEAD:-"MSGEHead"} # SingleBranch / SingleBranchCNN / SingleBranchSwin / GeoTokenHeadV1/GeoTokenV2Head /FSRA_CNN /LPN_CNN 
 head_pool=${HEAD_POOL:-"global"} # global avg max avg+max
 cls_loss=${CLS_LOSS:-"CELoss"} # CELoss FocalLoss
 feature_loss=${FEATURE_LOSS:-"WeightedSoftTripletLoss"} # TripletLoss HardMiningTripletLoss WeightedSoftTripletLoss ContrastiveLoss
 kl_loss=${KL_LOSS:-"KLLoss"} # KLLoss
-diversity_loss_weight=${DIVERSITY_LOSS_WEIGHT:-0.005}
+diversity_loss_weight=${DIVERSITY_LOSS_WEIGHT:-0.0}
 h=224
 w=224
 
@@ -44,13 +44,18 @@ ra="satellite"  # random affine
 re="satellite"  # random erasing
 cj="no"  # color jitter
 rr="uav"  # random rotate
-num_epochs=${NUM_EPOCHS:-50}
+num_epochs=${NUM_EPOCHS:-120}
 
 # 短训参数
 short_train=${SHORT_TRAIN:-false}
-short_train_epochs=${SHORT_EPOCHS:-5}
+short_train_epochs=${SHORT_EPOCHS:-10}
 
 # L_Diversity experiments:
+# GeoTokenV2 + CAG + L_Diversity without MSGE:
+# HEAD=GeoTokenV2CAGDivHead DIVERSITY_LOSS_WEIGHT=0.005 ./train_test_local.sh
+# HEAD=GeoTokenV2CAGDivHead DIVERSITY_LOSS_WEIGHT=0.01 ./train_test_local.sh
+# HEAD=GeoTokenV2CAGDivHead DIVERSITY_LOSS_WEIGHT=0.02 ./train_test_local.sh
+# MSGE + GeoTokenV2 + CAG + L_Diversity:
 # HEAD=MSGE_GeoTokenV2CAGDivHead DIVERSITY_LOSS_WEIGHT=0.005 ./train_test_local.sh
 # HEAD=MSGE_GeoTokenV2CAGDivHead DIVERSITY_LOSS_WEIGHT=0.01 ./train_test_local.sh
 # HEAD=MSGE_GeoTokenV2CAGDivHead DIVERSITY_LOSS_WEIGHT=0.02 ./train_test_local.sh

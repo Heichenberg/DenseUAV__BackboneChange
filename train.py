@@ -105,6 +105,8 @@ def get_parse():
     
 
     opt = parser.parse_args()
+    if isinstance(opt.head, str) and opt.head.startswith("HEAD="):
+        opt.head = opt.head.split("=", 1)[1]
     if opt.disable_autocast:
         opt.autocast = False
     if opt.backbone_lr <= 0:

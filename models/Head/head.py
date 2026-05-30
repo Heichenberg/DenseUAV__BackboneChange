@@ -42,6 +42,8 @@ class Head(nn.Module):
 
     def init_head(self, opt):
         head = opt.head
+        if isinstance(head, str) and head.startswith("HEAD="):
+            head = head.split("=", 1)[1]
         if head == "SingleBranch":
             head_model = SingleBranch(opt)
         elif head == "SingleBranchCNN":

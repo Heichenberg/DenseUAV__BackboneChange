@@ -13,10 +13,15 @@ class GeoTokenV2Head(nn.Module):
     output [cls, embedding]
     """
 
-    def __init__(self, opt):
+    def __init__(self, opt, use_global=True, use_detail=True):
         super().__init__()
         in_channels = opt.in_planes
+        if not use_global and not use_detail:
+            raise ValueError("GeoTokenV2Head requires at least one of global/detail tokens")
+        self.use_global = use_global
+        self.use_detail = use_detail
         self.num_query_tokens = 8
+        self.num_tokens = self.num_query_tokens + int(use_global) + int(use_detail)
         self.embedding_dim = opt.num_bottleneck
         self.scale = in_channels ** -0.5
 
@@ -32,7 +37,7 @@ class GeoTokenV2Head(nn.Module):
             groups=in_channels,
             bias=False,
         )
-        self.embedding = nn.Linear((self.num_query_tokens + 2) * in_channels, self.embedding_dim)
+        self.embedding = nn.Linear(self.num_tokens * in_channels, self.embedding_dim)
         self.bnneck = nn.BatchNorm1d(self.embedding_dim)
         self.bnneck.bias.requires_grad_(False)
         self.classifier = nn.Linear(self.embedding_dim, opt.nclasses)
@@ -46,6 +51,26 @@ class GeoTokenV2Head(nn.Module):
         self.bnneck.apply(weights_init_kaiming)
         self.classifier.apply(weights_init_classifier)
 
+    def _make_tokens(self, x):
+        batch = x.shape[0]
+        tokens = []
+        if self.use_global:
+            tokens.append(x.mean(dim=(2, 3)).unsqueeze(1))
+
+        feat = x.flatten(2).transpose(1, 2)
+        query = self.query.unsqueeze(0).expand(batch, -1, -1)
+        q = self.q_proj(query)
+        k = self.k_proj(feat)
+        v = self.v_proj(feat)
+        attn = torch.softmax(torch.matmul(q, k.transpose(1, 2)) * self.scale, dim=-1)
+        tokens.append(torch.matmul(attn, v))
+
+        if self.use_detail:
+            detail_map = self.detail_dwconv(x)
+            tokens.append(detail_map.mean(dim=(2, 3)).unsqueeze(1))
+
+        return torch.cat(tokens, dim=1)
+
     def forward(self, x):
         if x.ndim != 4:
             raise ValueError(
@@ -54,23 +79,19 @@ class GeoTokenV2Head(nn.Module):
                 )
             )
 
-        batch, channels, height, width = x.shape
-
-        global_token = x.mean(dim=(2, 3)).unsqueeze(1)
-
-        feat = x.flatten(2).transpose(1, 2)
-        query = self.query.unsqueeze(0).expand(batch, -1, -1)
-        q = self.q_proj(query)
-        k = self.k_proj(feat)
-        v = self.v_proj(feat)
-        attn = torch.softmax(torch.matmul(q, k.transpose(1, 2)) * self.scale, dim=-1)
-        query_tokens = torch.matmul(attn, v)
-
-        detail_map = self.detail_dwconv(x)
-        detail_token = detail_map.mean(dim=(2, 3)).unsqueeze(1)
-
-        tokens = torch.cat([global_token, query_tokens, detail_token], dim=1)
+        batch = x.shape[0]
+        tokens = self._make_tokens(x)
         embedding_raw = self.embedding(tokens.reshape(batch, -1))
         embedding = self.bnneck(embedding_raw)
         cls = self.classifier(embedding)
         return [cls, embedding]
+
+
+class GeoTokenV2NoGlobalHead(GeoTokenV2Head):
+    def __init__(self, opt):
+        super().__init__(opt, use_global=False, use_detail=True)
+
+
+class GeoTokenV2NoDetailHead(GeoTokenV2Head):
+    def __init__(self, opt):
+        super().__init__(opt, use_global=True, use_detail=False)

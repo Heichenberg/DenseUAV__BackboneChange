@@ -22,14 +22,14 @@ class SingleBranch(nn.Module):
             feature = global_feature
         elif self.head_pool == "avg":
             local_feature = local_feature.transpose(1, 2)
-            feature = torch.mean(local_feature, 2).squeeze()
+            feature = torch.mean(local_feature, 2)
         elif self.head_pool == "max":
             local_feature = local_feature.transpose(1, 2)
-            feature = torch.max(local_feature, 2)[0].squeeze()
+            feature = torch.max(local_feature, 2)[0]
         elif self.head_pool == "avg+max":
             local_feature = local_feature.transpose(1, 2)
-            avg_feature = torch.mean(local_feature, 2).squeeze()
-            max_feature = torch.max(local_feature, 2)[0].squeeze()
+            avg_feature = torch.mean(local_feature, 2)
+            max_feature = torch.max(local_feature, 2)[0]
             feature = avg_feature+max_feature
         else:
             raise TypeError("head_pool 不在支持的列表中！！！")

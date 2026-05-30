@@ -243,7 +243,7 @@ def load_network(opt):
     model = make_model(opt)
     # print('Load the model from %s' % save_filename)
     network = model
-    checkpoint = torch.load(save_filename)
+    checkpoint = torch.load(save_filename, map_location="cpu")
     state_dict = checkpoint.get("model_state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
     network.load_state_dict(state_dict)
     return network
@@ -285,8 +285,9 @@ def calc_flops_params(model,
                       input_size_drone,
                       input_size_satellite,
                       ):
-    inputs_drone = torch.randn(input_size_drone).cuda()
-    inputs_satellite = torch.randn(input_size_satellite).cuda()
+    device = next(model.parameters()).device
+    inputs_drone = torch.randn(input_size_drone, device=device)
+    inputs_satellite = torch.randn(input_size_satellite, device=device)
     total_ops, total_params = profile(
         model, (inputs_drone, inputs_satellite,), verbose=False)
     macs, params = clever_format([total_ops, total_params], "%.3f")

@@ -3,6 +3,7 @@ import sys
 sys.path.append("../../")
 import yaml
 import argparse
+import torch
 
 from tool.utils import load_network, calc_flops_params
 
@@ -17,11 +18,12 @@ opt = parser.parse_args()
 
 config_path = 'opts.yaml'
 with open(config_path, 'r') as stream:
-    config = yaml.load(stream)
+    config = yaml.safe_load(stream)
 for cfg, value in config.items():
     setattr(opt, cfg, value)
 
-model = load_network(opt).cuda()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = load_network(opt).to(device)
 model = model.eval()
 
 # thop计算MACs

@@ -6,8 +6,12 @@ from .GeM import GeM
 from .NetVLAD import NetVLAD
 from .MixerHead import MixerHeadV1
 from .GeoTokenHead import GeoTokenHeadV1
-from .GeoTokenV2Head import GeoTokenV2Head
-from .GeoTokenV2CAGHead import GeoTokenV2CAGHead
+from .GeoTokenV2Head import GeoTokenV2Head, GeoTokenV2NoDetailHead, GeoTokenV2NoGlobalHead
+from .GeoTokenV2CAGHead import (
+    GeoTokenV2CAGHead,
+    GeoTokenV2CAGNoDetailHead,
+    GeoTokenV2CAGNoGlobalHead,
+)
 from .GeoTokenV2CAGDivHead import GeoTokenV2CAGDivHead
 from .GeoTokenV2CAGKHead import GeoTokenV2CAG4Head, GeoTokenV2CAG16Head
 from .GeoTokenV2CAGMixerHead import (
@@ -62,8 +66,16 @@ class Head(nn.Module):
             head_model = GeoTokenHeadV1(opt)
         elif head == "GeoTokenV2Head":
             head_model = GeoTokenV2Head(opt)
+        elif head == "GeoTokenV2NoGlobalHead":
+            head_model = GeoTokenV2NoGlobalHead(opt)
+        elif head == "GeoTokenV2NoDetailHead":
+            head_model = GeoTokenV2NoDetailHead(opt)
         elif head == "GeoTokenV2CAGHead":
             head_model = GeoTokenV2CAGHead(opt)
+        elif head == "GeoTokenV2CAGNoGlobalHead":
+            head_model = GeoTokenV2CAGNoGlobalHead(opt)
+        elif head == "GeoTokenV2CAGNoDetailHead":
+            head_model = GeoTokenV2CAGNoDetailHead(opt)
         elif head == "GeoTokenV2CAGDivHead":
             head_model = GeoTokenV2CAGDivHead(opt)
         elif head == "GeoTokenV2CAG4Head":

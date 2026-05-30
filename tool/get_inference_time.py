@@ -20,11 +20,12 @@ opt = parser.parse_args()
 
 config_path = '../opts.yaml'
 with open(config_path, 'r') as stream:
-    config = yaml.load(stream)
+    config = yaml.safe_load(stream)
 for cfg, value in config.items():
     setattr(opt, cfg, value)
 
-model = load_network(opt).cuda()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = load_network(opt).to(device)
 model = model.eval()
 
 # thop计算MACs
@@ -33,16 +34,20 @@ macs, params = calc_flops_params(
 input_size_drone = (1, 3, opt.test_h, opt.test_w)
 input_size_satellite = (1, 3, opt.test_h, opt.test_w)
 
-inputs_drone = torch.randn(input_size_drone).cuda()
-inputs_satellite = torch.randn(input_size_satellite).cuda()
+inputs_drone = torch.randn(input_size_drone, device=device)
+inputs_satellite = torch.randn(input_size_satellite, device=device)
 
 # 预热
 for _ in range(10):
     model(inputs_drone,inputs_satellite)
 
+if torch.cuda.is_available():
+    torch.cuda.synchronize()
 since = time.time()
 for _ in range(opt.calc_nums):
     model(inputs_drone,inputs_satellite)
+if torch.cuda.is_available():
+    torch.cuda.synchronize()
 
 
 print("inference_time = {}s".format(time.time()-since))

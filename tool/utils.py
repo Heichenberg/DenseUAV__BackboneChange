@@ -205,6 +205,15 @@ def load_training_checkpoint(path, model, optimizer=None, scheduler=None, map_lo
     return checkpoint
 
 
+def move_optimizer_state(optimizer, device):
+    if optimizer is None:
+        return
+    for state in optimizer.state.values():
+        for key, value in state.items():
+            if torch.is_tensor(value):
+                state[key] = value.to(device)
+
+
 class UnNormalize(object):
     def __init__(self, mean, std):
         self.mean = mean
@@ -241,11 +250,20 @@ def check_box(images, boxes):
 def load_network(opt):
     save_filename = opt.checkpoint
     model = make_model(opt)
-    # print('Load the model from %s' % save_filename)
     network = model
     checkpoint = torch.load(save_filename)
     state_dict = checkpoint.get("model_state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
-    network.load_state_dict(state_dict)
+    msg = network.load_state_dict(state_dict)
+    if isinstance(checkpoint, dict):
+        print(
+            "Load trained checkpoint from: {} (epoch={}, best_metric={})".format(
+                save_filename, checkpoint.get("epoch"), checkpoint.get("best_metric")
+            )
+        )
+    else:
+        print("Load trained checkpoint from: {}".format(save_filename))
+    print("missing keys: {}".format(msg.missing_keys))
+    print("unexpected keys: {}".format(msg.unexpected_keys))
     return network
 
 

@@ -2,6 +2,7 @@ from torch import nn
 import torch
 import torch.nn.functional as F
 from torchvision import models
+import os
 
 class USAM(nn.Module):
     def __init__(self, kernel_size=3, padding=1, polish=False):
@@ -43,9 +44,17 @@ class USAM(nn.Module):
 
 
 class RKNet(nn.Module):
-    def __init__(self, stride=2, init_model=None, pool='avg'):
+    def __init__(self, stride=2, init_model=None, pool='avg', pretrained=""):
         super(RKNet, self).__init__()
-        model_ft = models.resnet50(pretrained=True)
+        model_ft = models.resnet50(pretrained=False)
+        if pretrained:
+            if not os.path.exists(pretrained):
+                raise FileNotFoundError("RKNet pretrained ResNet50 weight not found: {}".format(pretrained))
+            state_dict = torch.load(pretrained, map_location="cpu")
+            missing_keys, unexpected_keys = model_ft.load_state_dict(state_dict, strict=False)
+            print("Load RKNet ResNet50 pretrained checkpoint from:", pretrained)
+            print("missing keys:", missing_keys)
+            print("unexpected keys:", unexpected_keys)
         # avg pooling to global pooling
         if stride == 1:
             model_ft.layer4[0].downsample[0].stride = (1,1)

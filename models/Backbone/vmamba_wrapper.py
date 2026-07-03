@@ -117,12 +117,6 @@ def _cross_merge_fwd(y, in_channel_first=True, out_channel_first=True, scans=0):
 
 
 def _ensure_csm_triton_stub():
-    try:
-        import triton  # noqa: F401
-        return
-    except ModuleNotFoundError:
-        pass
-
     csm_triton = types.ModuleType("csm_triton")
     csm_triton.WITH_TRITON = False
     csm_triton.cross_scan_fn = lambda x, in_channel_first=True, out_channel_first=True, one_by_one=False, scans=0, force_torch=False: _cross_scan_fwd(
@@ -133,6 +127,7 @@ def _ensure_csm_triton_stub():
     )
     sys.modules.setdefault("csm_triton", csm_triton)
     sys.modules.setdefault("third_party.vmamba.csm_triton", csm_triton)
+    sys.modules.setdefault("third_party.vmamba.classification.models.csm_triton", csm_triton)
 
 
 def _import_vmamba_builders():

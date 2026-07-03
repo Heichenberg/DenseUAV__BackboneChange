@@ -1,7 +1,7 @@
 set -e
 
-name=${NAME:-"SwinB-224-SingleBranchswin"}
-root_dir=${ROOT_DIR:-"/home/cjr/GIT_REPO/Compare_Trial/Dataset/DenseUAV"}
+name=${NAME:-"VMamba-Tiny+GC5"}
+root_dir=${ROOT_DIR:-"/home/cjr/GIT_REPO/Dataset/DenseUAV"}
 data_dir=$root_dir/train
 test_dir=$root_dir/test
 gpu_ids=0
@@ -12,13 +12,13 @@ head_lr=${HEAD_LR:-0.01}
 batchsize=${BATCHSIZE:-8}
 sample_num=${SAMPLE_NUM:-1}
 
-backbone=${BACKBONE:-"SwinB-224"} # VMamba-Tiny VMamba-Small VMamba-Base
+backbone=${BACKBONE:-"VMamba-Tiny"} # VMamba-Tiny VMamba-Small VMamba-Base
 #resnet50 RKNet senet 
 #ViTS-224 ViTS-384 DeitS-224 DeitB-224 Pvtv2b2 ViTB-224 SwinB-224 Swinv2S-256 Swinv2T-256 Convnext-T
 #EfficientNet-B2 EfficientNet-B3 EfficientNet-B5 EfficientNet-B6
 #vgg16 cvt13
 backbone_weight=${BACKBONE_WEIGHT:-"pretrained/backbones/vmamba/tiny/vssm1_tiny_0230s_ckpt_epoch_264.pth"} #默认为空，如果填写了按照填写的读取
-head=${HEAD:-"SingleBranchSwin"} # SingleBranch / SingleBranchCNN / SingleBranchSwin / GeoTokenHeadV1
+head=${HEAD:-"GeoTokenHeadV1"} # SingleBranch / SingleBranchCNN / SingleBranchSwin / GeoTokenHeadV1
 head_pool=${HEAD_POOL:-"global"} # global avg max avg+max
 cls_loss=${CLS_LOSS:-"CELoss"} # CELoss FocalLoss
 feature_loss=${FEATURE_LOSS:-"WeightedSoftTripletLoss"} # TripletLoss HardMiningTripletLoss WeightedSoftTripletLoss ContrastiveLoss

@@ -16,7 +16,7 @@ from models.taskflow import make_model
 from datasets.make_dataloader import make_dataset
 from datasets.dss_fss import build_fss_neighbors, should_update_fss
 from datasets.dss_stage import DSSStageController
-from tool.utils import save_network, copyfiles2checkpoints, get_preds, get_logger, calc_flops_params, set_seed, save_training_checkpoint, load_training_checkpoint, save_run_artifacts
+from tool.utils import save_network, copyfiles2checkpoints, get_preds, get_logger, calc_flops_params, set_seed, save_training_checkpoint, load_training_checkpoint, save_run_artifacts, move_optimizer_state
 import warnings
 from losses.loss import Loss
 
@@ -186,6 +186,15 @@ def train_model(model, opt, optimizer, scheduler, dataloaders, dataset_sizes, st
     since = time.time()
     scaler = GradScaler(enabled=opt.autocast and use_gpu)
     nnloss = Loss(opt)
+    if use_gpu:
+        current_device = torch.cuda.current_device()
+        logger.info(
+            "CUDA enabled: device={} name={} autocast={}".format(
+                current_device, torch.cuda.get_device_name(current_device), opt.autocast
+            )
+        )
+    else:
+        logger.info("CUDA disabled: training on CPU")
     total_batches_seen = 0
     dss_stage_controller = None
     if getattr(opt, "train_strategy", "origin") == "dss" and getattr(opt, "dss_stage_mode", "fixed") == "loss_adaptive":
@@ -404,6 +413,7 @@ if __name__ == '__main__':
 
     if use_gpu:
         model = model.cuda()
+        move_optimizer_state(optimizer_ft, torch.device("cuda", gpu_ids[0] if len(gpu_ids) > 0 else 0))
 
     train_model(model, opt, optimizer_ft, exp_lr_scheduler,
                 dataloaders, dataset_sizes, start_epoch=start_epoch, best_metric=best_metric)

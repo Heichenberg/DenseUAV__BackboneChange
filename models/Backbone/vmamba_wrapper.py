@@ -171,10 +171,91 @@ def _import_vmamba_builders():
     }
 
 
+class MSGE(nn.Module):
+    def __init__(self, channels, reduction=16):
+        super().__init__()
+        hidden_dim = max(channels // reduction, 1)
+        self.dwconv3 = nn.Conv2d(channels, channels, kernel_size=3, padding=1, groups=channels, bias=False)
+        self.dwconv5 = nn.Conv2d(channels, channels, kernel_size=5, padding=2, groups=channels, bias=False)
+        self.dwconv7 = nn.Conv2d(channels, channels, kernel_size=7, padding=3, groups=channels, bias=False)
+        self.fusion = nn.Conv2d(3 * channels, channels, kernel_size=1, bias=False)
+        self.se = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels, hidden_dim, kernel_size=1),
+            nn.GELU(),
+            nn.Conv2d(hidden_dim, channels, kernel_size=1),
+            nn.Sigmoid(),
+        )
+        self.alpha = nn.Parameter(torch.zeros(1))
+
+        self._init_laplacian_depthwise(self.dwconv3, 3)
+        self._init_laplacian_depthwise(self.dwconv5, 5)
+        self._init_laplacian_depthwise(self.dwconv7, 7)
+        self._init_conv(self.fusion)
+        self.se.apply(self._init_conv)
+
+    def _init_laplacian_depthwise(self, conv, kernel_size):
+        weight = conv.weight.data
+        weight.zero_()
+        kernel = weight.new_full((kernel_size, kernel_size), -1.0 / (kernel_size * kernel_size - 1))
+        center = kernel_size // 2
+        kernel[center, center] = 1.0
+        weight[:, 0, :, :] = kernel
+
+    def _init_conv(self, module):
+        if isinstance(module, nn.Conv2d):
+            nn.init.kaiming_normal_(module.weight, mode="fan_out")
+            if module.bias is not None:
+                nn.init.constant_(module.bias, 0)
+
+    def get_alpha(self):
+        return float(self.alpha.detach().cpu().item())
+
+    def forward(self, x):
+        g3 = self.dwconv3(x)
+        g5 = self.dwconv5(x)
+        g7 = self.dwconv7(x)
+        g_cat = torch.cat([g3, g5, g7], dim=1)
+        g_fused = self.fusion(g_cat)
+        g_enhanced = g_fused * self.se(g_fused)
+        return x + self.alpha * g_enhanced
+
+
+def _make_msge_vss_block(base_vss_block):
+    class MSGEVSSBlock(base_vss_block):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            hidden_dim = kwargs.get("hidden_dim", args[0] if args else 0)
+            channel_first = kwargs.get("channel_first", False)
+            if not channel_first:
+                raise ValueError("MSGEVSSBlock currently requires channel_first=True")
+            self.msge = MSGE(hidden_dim)
+
+        def _forward(self, input):
+            x = input
+            if self.ssm_branch:
+                if self.post_norm:
+                    y = self.op(x)
+                    y = self.msge(y)
+                    x = x + self.drop_path(self.norm(y))
+                else:
+                    y = self.op(self.norm(x))
+                    y = self.msge(y)
+                    x = x + self.drop_path(y)
+            if self.mlp_branch:
+                if self.post_norm:
+                    x = x + self.drop_path(self.norm2(self.mlp(x)))
+                else:
+                    x = x + self.drop_path(self.mlp(self.norm2(x)))
+            return x
+
+    return MSGEVSSBlock
+
+
 class VMambaBackbone(nn.Module):
     _BUILDERS = None
 
-    def __init__(self, variant="tiny", pretrained="", output_mode="map"):
+    def __init__(self, variant="tiny", pretrained="", output_mode="map", block_factory=None):
         super().__init__()
         if self._BUILDERS is None:
             type(self)._BUILDERS = _import_vmamba_builders()
@@ -185,13 +266,26 @@ class VMambaBackbone(nn.Module):
 
         self.variant = variant
         self.output_mode = output_mode
-        self.backbone = self._BUILDERS[variant](channel_first=True)
+        self.backbone = self._build_backbone(variant, block_factory)
         self.output_channel = self.backbone.num_features
         self.global_pool = nn.AdaptiveAvgPool2d(1)
         self.output_norm = nn.LayerNorm(self.output_channel)
 
         if pretrained:
             self.load_pretrained(pretrained)
+
+    def _build_backbone(self, variant, block_factory=None):
+        if block_factory is None:
+            return self._BUILDERS[variant](channel_first=True)
+
+        from third_party.vmamba.classification.models import vmamba
+
+        original_vss_block = vmamba.VSSBlock
+        vmamba.VSSBlock = block_factory(original_vss_block)
+        try:
+            return self._BUILDERS[variant](channel_first=True)
+        finally:
+            vmamba.VSSBlock = original_vss_block
 
     def load_pretrained(self, checkpoint_path):
         checkpoint_path = _resolve_path(checkpoint_path)
@@ -235,6 +329,16 @@ class VMambaTinyBackbone(VMambaBackbone):
         super().__init__(variant="tiny", pretrained=pretrained, output_mode=output_mode)
 
 
+class VMambaTinyMSGEBlockBackbone(VMambaBackbone):
+    def __init__(self, pretrained="", output_mode="map"):
+        super().__init__(
+            variant="tiny",
+            pretrained=pretrained,
+            output_mode=output_mode,
+            block_factory=_make_msge_vss_block,
+        )
+
+
 class VMambaSmallBackbone(VMambaBackbone):
     def __init__(self, pretrained="", output_mode="map"):
         super().__init__(variant="small", pretrained=pretrained, output_mode=output_mode)
@@ -243,57 +347,3 @@ class VMambaSmallBackbone(VMambaBackbone):
 class VMambaBaseBackbone(VMambaBackbone):
     def __init__(self, pretrained="", output_mode="map"):
         super().__init__(variant="base", pretrained=pretrained, output_mode=output_mode)
-
-
-class MultiScaleSpatialGradientEnhancement(nn.Module):
-    def __init__(self, channels, kernels=(3, 5, 7), reduction=4, alpha=0.1):
-        super().__init__()
-        self.branches = nn.ModuleList([
-            nn.Conv2d(
-                channels,
-                channels,
-                kernel_size=kernel,
-                padding=kernel // 2,
-                groups=channels,
-                bias=False,
-            )
-            for kernel in kernels
-        ])
-        self.fuse = nn.Sequential(
-            nn.Conv2d(channels * len(kernels), channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(channels),
-            nn.GELU(),
-        )
-        hidden = max(channels // reduction, 16)
-        self.channel_gate = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(channels, hidden, kernel_size=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(hidden, channels, kernel_size=1),
-            nn.Sigmoid(),
-        )
-        self.alpha = nn.Parameter(torch.tensor(float(alpha)))
-
-    def forward(self, x):
-        gradients = [branch(x) - x for branch in self.branches]
-        enhanced = self.fuse(torch.cat(gradients, dim=1))
-        enhanced = enhanced * self.channel_gate(enhanced)
-        return x + self.alpha * enhanced
-
-
-class VMambaMSGEnhanceBackbone(nn.Module):
-    def __init__(self, pretrained="", output_mode="map"):
-        super().__init__()
-        self.vmamba = VMambaTinyBackbone(pretrained=pretrained, output_mode=output_mode)
-        self.output_channel = self.vmamba.output_channel
-        self.output_mode = output_mode
-        if output_mode != "map":
-            raise ValueError("VMamba-MSGE requires map output for spatial enhancement")
-        self.msge = MultiScaleSpatialGradientEnhancement(self.output_channel)
-
-    def forward_features(self, x):
-        x = self.vmamba.forward_features(x)
-        return self.msge(x)
-
-    def forward(self, x):
-        return self.forward_features(x)

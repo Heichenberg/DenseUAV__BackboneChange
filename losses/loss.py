@@ -40,8 +40,8 @@ class Loss(nn.Module):
         
 
     def forward(self, outputs, outputs2, labels, labels2):
-        cls1,feature1 = outputs
-        cls2,feature2 = outputs2
+        cls1, feature1 = self._split_outputs(outputs)
+        cls2, feature2 = self._split_outputs(outputs2)
         loss = 0
 
         # 分类损失
@@ -72,6 +72,11 @@ class Loss(nn.Module):
         #     loss *= warm_up
 
         return loss, res_cls_loss, res_triplet_loss, res_kl_loss
+
+    def _split_outputs(self, outputs):
+        if not isinstance(outputs, (list, tuple)) or len(outputs) < 2:
+            raise ValueError("Head outputs must contain at least [cls, feature]")
+        return outputs[0], outputs[1]
     
 
     def calc_cls_loss(self, outputs, labels, loss_func):
@@ -111,4 +116,3 @@ class Loss(nn.Module):
             labels_concat = torch.cat((labels, labels), dim=0)
             loss = loss_func(out_concat, labels_concat)
         return loss
-

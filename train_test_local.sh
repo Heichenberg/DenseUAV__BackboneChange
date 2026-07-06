@@ -1,16 +1,16 @@
 set -e
 
-name=${NAME:-"VMamba-MSGE+MGTRF+KLLoss+bts8"}
+name=${NAME:-"VMamba-MSGE+MGTRF+KLLoss-bts16-sp2"}
 root_dir=${ROOT_DIR:-"/home/cjr/GIT_REPO/Dataset/DenseUAV"}
 data_dir=$root_dir/train
 test_dir=$root_dir/test
 gpu_ids=0
 num_worker=8
-lr=${LR:-0.001}
-backbone_lr=${BACKBONE_LR:-0.003}
-head_lr=${HEAD_LR:-0.01}
-batchsize=${BATCHSIZE:-8}
-sample_num=${SAMPLE_NUM:-1}
+lr=${LR:-0.003}
+backbone_lr=${BACKBONE_LR:-0.0009}
+head_lr=${HEAD_LR:-0.003}
+batchsize=${BATCHSIZE:-16}
+sample_num=${SAMPLE_NUM:-2}
 
 backbone=${BACKBONE:-"VMamba-MSGE"} # VMamba-Tiny VMamba-Small VMamba-Base
 #resnet50 RKNet senet 
@@ -119,6 +119,8 @@ if [ "$backbone" = "VMamba-Tiny" ]; then
             exit 1
             ;;
     esac
+elif [ "$backbone" = "VMamba-MSGE" ] || [ "$backbone" = "Vmamba-MSGE" ] || [ "$backbone" = "VMamba-Tiny-MSGEBlock" ]; then
+    token_mode=""
 else
     token_mode=""
     if [ "$name" = "VMamba-Tiny_GeoTokenHeadV1-CELOSS+HardMiningTripletLoss+klloss--GC5-epoch90" ]; then

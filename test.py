@@ -36,6 +36,10 @@ parser.add_argument('--ms', default='1', type=str,
                     help='multiple_scale: e.g. 1 1,1.1  1,1.1,1.2')
 parser.add_argument('--num_worker', default=4, type=int,help='')
 parser.add_argument('--mode',default='1', type=int,help='1:drone->satellite   2:satellite->drone')
+parser.add_argument('--max_query_images', default=0, type=int,
+                    help='use only the first N query images, 0 means all')
+parser.add_argument('--max_gallery_images', default=0, type=int,
+                    help='use only the first N gallery images, 0 means all')
 opt = parser.parse_args()
 
 print(opt.name)
@@ -104,6 +108,24 @@ image_datasets_gallery = {
 }
 
 image_datasets = {**image_datasets_query, **image_datasets_gallery}
+
+
+def limit_imagefolder(dataset, max_images):
+    if max_images is None or max_images <= 0:
+        return dataset
+    max_images = min(max_images, len(dataset.samples))
+    dataset.samples = dataset.samples[:max_images]
+    dataset.imgs = dataset.samples
+    dataset.targets = [sample[1] for sample in dataset.samples]
+    return dataset
+
+
+limit_imagefolder(image_datasets[query_name], getattr(opt, "max_query_images", 0))
+limit_imagefolder(image_datasets[gallery_name], getattr(opt, "max_gallery_images", 0))
+print("Evaluation samples: {}={} {}={}".format(
+    query_name, len(image_datasets[query_name]),
+    gallery_name, len(image_datasets[gallery_name]),
+))
 
 dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
                                               shuffle=False, num_workers=opt.num_worker) for x in [gallery_name, query_name]}

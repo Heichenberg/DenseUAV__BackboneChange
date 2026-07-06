@@ -21,7 +21,7 @@ backbone_lr=${BACKBONE_LR:-0.0006}
 head_lr=${HEAD_LR:-0.001}
 batchsize=${BATCHSIZE:-8}
 sample_num=${SAMPLE_NUM:-1}
-num_epochs=${NUM_EPOCHS:-120}
+num_epochs=${NUM_EPOCHS:-80}
 
 backbone=${BACKBONE:-"VMamba-MSGE"}
 backbone_weight=${BACKBONE_WEIGHT:-"pretrained/backbones/vmamba/tiny/vssm1_tiny_0230s_ckpt_epoch_264.pth"}

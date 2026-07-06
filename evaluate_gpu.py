@@ -71,10 +71,11 @@ if multi:
     m_result = scipy.io.loadmat('multi_query.mat')
     mquery_feature = torch.FloatTensor(m_result['mquery_f'])
     mquery_label = m_result['mquery_label'][0]
-    mquery_feature = mquery_feature.cuda()
+    mquery_feature = mquery_feature.cuda() if torch.cuda.is_available() else mquery_feature
 
-query_feature = query_feature.cuda(0)
-gallery_feature = gallery_feature.cuda(0)
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+query_feature = query_feature.to(device)
+gallery_feature = gallery_feature.to(device)
 
 print(query_feature.shape)
 print(gallery_feature.shape)
@@ -96,8 +97,11 @@ print(round(len(gallery_label)*0.01))
 info = 'Recall@1:%.2f Recall@5:%.2f Recall@10:%.2f Recall@top1:%.2f AP:%.2f'%(CMC[0]*100,CMC[4]*100,CMC[9]*100, CMC[round(len(gallery_label)*0.01)]*100, ap/len(query_label)*100)
 print(info)
 
-with open("results.txt", "w") as F:
-    F.write(info)
+try:
+    with open("results.txt", "w") as F:
+        F.write(info)
+except OSError as exc:
+    print("Warning: failed to write results.txt: {}".format(exc))
 
 
 # multiple-query

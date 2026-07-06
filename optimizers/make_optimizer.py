@@ -5,7 +5,7 @@ from torch.optim import lr_scheduler
 def make_optimizer(model,opt):
     backbone_lr = opt.backbone_lr
     head_lr = opt.head_lr
-    if getattr(opt, "backbone", "") != "VMamba-Tiny":
+    if getattr(opt, "backbone", "") not in ("VMamba-Tiny", "VMamba-MSGE", "Vmamba-MSGE"):
         backbone_lr = opt.lr
         head_lr = opt.lr
         opt.backbone_lr = opt.lr

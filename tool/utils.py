@@ -62,6 +62,7 @@ def copyfiles2checkpoints(opt):
     copy_file_or_tree('tool', dir_name)
     copy_file_or_tree('train_test', dir_name)
     copy_file_or_tree('train_test_local.sh', dir_name)
+    copy_file_or_tree('university_train_test_local.sh', dir_name)
 
     # save opts
     with open('%s/opts.yaml' % dir_name, 'w') as fp:

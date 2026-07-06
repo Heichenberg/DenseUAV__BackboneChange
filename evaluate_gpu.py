@@ -59,7 +59,8 @@ def compute_mAP(index, good_index, junk_index):
     return ap, cmc
 
 ######################################################################
-result = scipy.io.loadmat('pytorch_result_1.mat')
+result_mat = os.environ.get('RESULT_MAT', 'pytorch_result_1.mat')
+result = scipy.io.loadmat(result_mat)
 query_feature = torch.FloatTensor(result['query_f'])
 query_label = result['query_label'][0]
 gallery_feature = torch.FloatTensor(result['gallery_f'])
@@ -117,4 +118,3 @@ if multi:
     CMC = CMC.float()
     CMC = CMC/len(query_label) #average CMC
     print('multi Rank@1:%f Rank@5:%f Rank@10:%f mAP:%f'%(CMC[0],CMC[4],CMC[9],ap/len(query_label)))
-

@@ -1,13 +1,13 @@
 set -e
 
-name=${NAME:-"VMamba-Tiny+GC5"}
+name=${NAME:-"VMamba-Tiny+GC3+klloss+bts8"}
 root_dir=${ROOT_DIR:-"/home/cjr/GIT_REPO/Dataset/DenseUAV"}
 data_dir=$root_dir/train
 test_dir=$root_dir/test
 gpu_ids=0
 num_worker=8
 lr=${LR:-0.001}
-backbone_lr=${BACKBONE_LR:-0.005}
+backbone_lr=${BACKBONE_LR:-0.006}
 head_lr=${HEAD_LR:-0.01}
 batchsize=${BATCHSIZE:-8}
 sample_num=${SAMPLE_NUM:-1}
@@ -65,7 +65,7 @@ short_train_epochs=${SHORT_EPOCHS:-5}
 
 
 #训练token mode
-token_mode=${TOKEN_MODE:-GC5}
+token_mode=${TOKEN_MODE:-GC3}
 if [ "$backbone" = "VMamba-Tiny" ]; then
     case "$token_mode" in
         C)
@@ -79,6 +79,9 @@ if [ "$backbone" = "VMamba-Tiny" ]; then
             ;;
         GC)
             backbone="VMamba-Tiny-_GeoTokenHeadV1_GC"
+            ;;
+        GC3)
+            backbone="VMamba-Tiny-_GeoTokenHeadV1_GC3"
             ;;
         GC5)
             backbone="VMamba-Tiny-_GeoTokenHeadV1_GC5"
@@ -112,7 +115,7 @@ if [ "$backbone" = "VMamba-Tiny" ]; then
             ;;
         *)
             echo "Unsupported TOKEN_MODE: $token_mode"
-            echo "Supported: C, C5, G, GC, GC5, GR, GS, GCR, GCRS, GCR5_D384, GCR5_D192, GCR5_D192_GATE, GC5R_D192, GC5R_D192_GATE"
+            echo "Supported: C, C5, G, GC, GC3, GC5, GR, GS, GCR, GCRS, GCR5_D384, GCR5_D192, GCR5_D192_GATE, GC5R_D192, GC5R_D192_GATE"
             exit 1
             ;;
     esac

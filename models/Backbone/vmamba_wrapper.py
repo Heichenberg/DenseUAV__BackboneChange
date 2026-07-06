@@ -243,3 +243,57 @@ class VMambaSmallBackbone(VMambaBackbone):
 class VMambaBaseBackbone(VMambaBackbone):
     def __init__(self, pretrained="", output_mode="map"):
         super().__init__(variant="base", pretrained=pretrained, output_mode=output_mode)
+
+
+class MultiScaleSpatialGradientEnhancement(nn.Module):
+    def __init__(self, channels, kernels=(3, 5, 7), reduction=4, alpha=0.1):
+        super().__init__()
+        self.branches = nn.ModuleList([
+            nn.Conv2d(
+                channels,
+                channels,
+                kernel_size=kernel,
+                padding=kernel // 2,
+                groups=channels,
+                bias=False,
+            )
+            for kernel in kernels
+        ])
+        self.fuse = nn.Sequential(
+            nn.Conv2d(channels * len(kernels), channels, kernel_size=1, bias=False),
+            nn.BatchNorm2d(channels),
+            nn.GELU(),
+        )
+        hidden = max(channels // reduction, 16)
+        self.channel_gate = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(channels, hidden, kernel_size=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(hidden, channels, kernel_size=1),
+            nn.Sigmoid(),
+        )
+        self.alpha = nn.Parameter(torch.tensor(float(alpha)))
+
+    def forward(self, x):
+        gradients = [branch(x) - x for branch in self.branches]
+        enhanced = self.fuse(torch.cat(gradients, dim=1))
+        enhanced = enhanced * self.channel_gate(enhanced)
+        return x + self.alpha * enhanced
+
+
+class VMambaMSGEnhanceBackbone(nn.Module):
+    def __init__(self, pretrained="", output_mode="map"):
+        super().__init__()
+        self.vmamba = VMambaTinyBackbone(pretrained=pretrained, output_mode=output_mode)
+        self.output_channel = self.vmamba.output_channel
+        self.output_mode = output_mode
+        if output_mode != "map":
+            raise ValueError("VMamba-MSGE requires map output for spatial enhancement")
+        self.msge = MultiScaleSpatialGradientEnhancement(self.output_channel)
+
+    def forward_features(self, x):
+        x = self.vmamba.forward_features(x)
+        return self.msge(x)
+
+    def forward(self, x):
+        return self.forward_features(x)

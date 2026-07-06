@@ -11,6 +11,7 @@ def normalize_model_alias(opt):
         "VMamba-Tiny-_GeoTokenHeadV1_C": ("VMamba-Tiny", "GeoTokenHeadV1", ("center",), 3, 7, 384, False, 0.1),
         "VMamba-Tiny-_GeoTokenHeadV1_G": ("VMamba-Tiny", "GeoTokenHeadV1", ("global",), 3, 7, 384, False, 0.1),
         "VMamba-Tiny-_GeoTokenHeadV1_GC": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center"), 3, 7, 384, False, 0.1),
+        "VMamba-Tiny-_GeoTokenHeadV1_GC3": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center"), 3, 7, 384, False, 0.1),
         "VMamba-Tiny-_GeoTokenHeadV1_GR": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "context"), 3, 7, 384, False, 0.1),
         "VMamba-Tiny-_GeoTokenHeadV1_GS": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "structure"), 3, 7, 384, False, 0.1),
         "VMamba-Tiny-_GeoTokenHeadV1_GCR": ("VMamba-Tiny", "GeoTokenHeadV1", ("global", "center", "context"), 3, 7, 384, False, 0.1),

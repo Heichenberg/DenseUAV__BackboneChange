@@ -107,6 +107,12 @@ def get_parse():
     parser.add_argument('--backbone_weight', default="", type=str, help='pretrained backbone checkpoint path')
     parser.add_argument('--head', default="FSRA_CNN", type=str, help='head type for applying')
     parser.add_argument('--head_pool', default="max", type=str, help='head pooling type for applying')
+    parser.add_argument('--mgtrf_num_queries', default=8, type=int,
+                        help='number of learnable query tokens used by MGTRF')
+    parser.add_argument('--mgtrf_proj_dim', default=384, type=int,
+                        help='projection dimension used by MGTRF tokens')
+    parser.add_argument('--mgtrf_drop_rate', default=0.0, type=float,
+                        help='dropout probability before MGTRF BNNeck')
     parser.add_argument('--max_train_batches', default=0, type=int,
                         help='max batches per epoch, 0 means no limit')
     parser.add_argument('--max_total_batches', default=0, type=int,

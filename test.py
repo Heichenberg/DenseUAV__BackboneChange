@@ -86,16 +86,27 @@ data_query_transforms = transforms.Compose([
 
 data_dir = test_dir
 
-image_datasets_query = {x: datasets.ImageFolder(os.path.join(
-    data_dir, x), data_query_transforms) for x in ['query_drone']}
+if opt.mode == 1:
+    query_name = 'query_drone'
+    gallery_name = 'gallery_satellite'
+elif opt.mode == 2:
+    query_name = 'query_satellite'
+    gallery_name = 'gallery_drone'
+else:
+    raise Exception("opt.mode is not required")
 
-image_datasets_gallery = {x: datasets.ImageFolder(os.path.join(
-    data_dir, x), data_transforms) for x in ['gallery_satellite']}
+image_datasets_query = {
+    query_name: datasets.ImageFolder(os.path.join(data_dir, query_name), data_query_transforms)
+}
+
+image_datasets_gallery = {
+    gallery_name: datasets.ImageFolder(os.path.join(data_dir, gallery_name), data_transforms)
+}
 
 image_datasets = {**image_datasets_query, **image_datasets_gallery}
 
 dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize,
-                                              shuffle=False, num_workers=opt.num_worker) for x in ['gallery_satellite', 'query_drone']}
+                                              shuffle=False, num_workers=opt.num_worker) for x in [gallery_name, query_name]}
 use_gpu = torch.cuda.is_available()
 
 
@@ -184,16 +195,6 @@ if use_gpu:
 
 # Extract feature
 since = time.time()
-
-if opt.mode == 1:
-    query_name = 'query_drone'
-    gallery_name = 'gallery_satellite'
-elif opt.mode == 2:
-    query_name = 'query_satellite'
-    gallery_name = 'gallery_drone'
-else:
-    raise Exception("opt.mode is not required")
-
 
 which_gallery = which_view(gallery_name)
 which_query = which_view(query_name)
